@@ -1,0 +1,15 @@
+{
+  "name": "claude-window-optimizer",
+  "description": "A single plugin that keeps your Claude Code 5-hour usage window aligned to when you actually work.",
+  "owner": {
+    "name": "Yahor Dauksha",
+    "url": "https://github.com/yahordauksha"
+  },
+  "plugins": [
+    {
+      "name": "claude-window-optimizer",
+      "source": "./",
+      "description": "Keeps your Claude Code 5-hour usage window aligned to when you actually work."
+    }
+  ]
+}
