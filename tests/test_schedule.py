@@ -6,14 +6,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
 from window_optimizer.schedule import (
     build_schedule,
-    compute_weighted_anchor,
+    compute_balanced_anchor,
     cron_for_minute_of_day,
     first_prompt_per_day,
     local_minutes_to_utc,
     logged_days_in_window,
     parse_hhmm,
     parse_log_timestamps,
+    segment_lengths,
+    segment_loads,
     slot_minutes_from_anchor,
+    usage_histogram,
 )
 
 # ---- Spacing invariant: this is the whole point of the plugin ----
@@ -115,52 +118,6 @@ def test_first_prompt_per_day_takes_earliest():
 # ---- Weighted anchor computation ----
 
 
-def test_compute_weighted_anchor_no_data_returns_none():
-    now = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
-    assert compute_weighted_anchor([], now) is None
-
-
-def test_compute_weighted_anchor_ignores_data_outside_trailing_window():
-    tz = timezone.utc
-    now = datetime(2026, 8, 10, 12, 0, tzinfo=tz)
-    old = [datetime(2026, 1, 1, 6, 0, tzinfo=tz)]  # far outside the 28-day window
-    assert compute_weighted_anchor(old, now) is None
-
-
-def test_compute_weighted_anchor_near_midnight_does_not_average_to_noon():
-    """The circular-mean bug this design deliberately avoids: naive averaging of 23:45 and 00:15 gives ~12:00."""
-    tz = timezone.utc
-    now = datetime(2026, 8, 10, 12, 0, tzinfo=tz)
-    timestamps = [
-        datetime(2026, 8, 8, 23, 45, tzinfo=tz),
-        datetime(2026, 8, 9, 0, 15, tzinfo=tz),
-    ]
-    anchor = compute_weighted_anchor(timestamps, now)
-    # correct circular mean of 23:45 and 00:15 is 00:00 (minute 0), not ~12:00 (minute 720)
-    assert anchor is not None
-    assert abs(anchor - 0) < 5 or abs(anchor - 1440) < 5
-
-
-def test_compute_weighted_anchor_same_weekday_dominates_with_enough_samples():
-    """Two same-weekday samples should pull the blended anchor toward the weekday-specific average."""
-    tz = timezone.utc
-    now = datetime(2026, 8, 10, 12, 0, tzinfo=tz)  # a Monday
-    assert now.weekday() == 0
-
-    timestamps = [
-        # Mondays (same weekday as `now`) consistently at 6:00
-        datetime(2026, 7, 27, 6, 0, tzinfo=tz),
-        datetime(2026, 8, 3, 6, 0, tzinfo=tz),
-        # Other weekdays consistently at 9:00
-        datetime(2026, 7, 28, 9, 0, tzinfo=tz),
-        datetime(2026, 7, 29, 9, 0, tzinfo=tz),
-        datetime(2026, 7, 30, 9, 0, tzinfo=tz),
-    ]
-    anchor = compute_weighted_anchor(timestamps, now)
-    # 70/30 blend toward 6:00 should land closer to 6:00 than to 9:00
-    assert anchor < 8 * 60
-
-
 def test_logged_days_in_window_counts_distinct_days_not_lines():
     tz = timezone.utc
     now = datetime(2026, 8, 10, 12, 0, tzinfo=tz)
@@ -179,14 +136,93 @@ def test_logged_days_in_window_excludes_data_outside_trailing_window():
     assert logged_days_in_window(timestamps, now) == 0
 
 
-def test_compute_weighted_anchor_falls_back_to_all_days_with_few_weekday_samples():
-    tz = timezone.utc
-    now = datetime(2026, 8, 10, 12, 0, tzinfo=tz)  # Monday
-    timestamps = [
-        datetime(2026, 7, 28, 7, 0, tzinfo=tz),  # Tuesday
-        datetime(2026, 7, 29, 7, 0, tzinfo=tz),  # Wednesday
-        datetime(2026, 7, 30, 7, 0, tzinfo=tz),  # Thursday
-    ]
-    # zero same-weekday (Monday) samples -> pure all-days average -> ~7:00
-    anchor = compute_weighted_anchor(timestamps, now)
-    assert abs(anchor - 7 * 60) < 5
+# ---- Balanced-anchor estimator ----
+
+
+def _prompts(spec, base=None):
+    """spec: [(days_ago, [(h, m), ...]), ...] -> flat timestamp list."""
+    base = base or datetime(2026, 8, 10, tzinfo=timezone.utc)
+    return [base - timedelta(days=d) + timedelta(hours=h, minutes=m) for d, mins in spec for (h, m) in mins]
+
+
+NOW = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
+
+
+def test_segment_lengths_partition_the_whole_day():
+    lengths = segment_lengths()
+    assert len(lengths) == 4
+    assert sum(lengths) == 1440
+    assert lengths[:3] == [310, 310, 310]
+    assert lengths[3] == 510
+
+
+def test_usage_histogram_counts_every_prompt_not_one_per_day():
+    ts = _prompts([(1, [(9, 0), (9, 30), (10, 0)]), (2, [(9, 0)])])
+    counts = usage_histogram(ts, NOW)
+    assert sum(counts) == 4  # not 2 — every prompt counts, not one per day
+    assert counts[9 * 60] == 2
+
+
+def test_usage_histogram_excludes_data_outside_trailing_window():
+    ts = _prompts([(200, [(9, 0), (9, 30)])])
+    assert sum(usage_histogram(ts, NOW)) == 0
+
+
+def test_segment_loads_account_for_every_prompt():
+    """Segments partition the day, so nothing can hide between them."""
+    ts = _prompts([(d, [(h, 0) for h in range(0, 24)]) for d in range(1, 4)])
+    counts = usage_histogram(ts, NOW)
+    for anchor in (0, 137, 800, 1439):
+        assert sum(segment_loads(counts, anchor)) == sum(counts)
+
+
+def test_balanced_anchor_none_without_data():
+    assert compute_balanced_anchor([], NOW) is None
+
+
+def test_balanced_anchor_splits_a_long_working_block():
+    """The whole point: a reset should land inside a heavy block so it doesn't ride on one budget."""
+    block = [(9, 0), (9, 30), (10, 0), (10, 30), (11, 0), (11, 30), (12, 0), (12, 30)]
+    ts = _prompts([(d, block) for d in range(1, 21)])
+    anchor = compute_balanced_anchor(ts, NOW)
+    loads = segment_loads(usage_histogram(ts, NOW), anchor)
+    # 160 prompts total; leaving them on one budget would peak at 160
+    assert sum(loads) == 160
+    assert max(loads) <= 80
+
+
+def test_balanced_anchor_never_hides_usage_in_uncovered_gaps():
+    """Regression: an earlier objective scored 'usage in the gaps' as free, so the
+    best-scoring schedule for a night owl was all-zero load — i.e. every prompt
+    landing when no window was open. Segments partition the day precisely so that
+    degenerate optimum is unrepresentable."""
+    ts = _prompts([(d, [(22, 0), (22, 30), (23, 0), (23, 30), (0, 30)]) for d in range(1, 21)])
+    anchor = compute_balanced_anchor(ts, NOW)
+    loads = segment_loads(usage_histogram(ts, NOW), anchor)
+    assert sum(loads) == 100
+    assert max(loads) > 0  # someone's budget must own this work
+
+
+def test_balanced_anchor_is_robust_to_stray_early_prompts():
+    """The old first-prompt-per-day mean moved 71 minutes on 3 outliers; this must barely move."""
+    clean = [(d, [(9, 0), (9, 30), (10, 0), (10, 30), (11, 0), (11, 30), (12, 0), (12, 30)]) for d in range(1, 21)]
+    noisy = [(d, ([(6, 0)] if d in (3, 8, 14) else []) + mins) for d, mins in clean]
+    a_clean = compute_balanced_anchor(_prompts(clean), NOW)
+    a_noisy = compute_balanced_anchor(_prompts(noisy), NOW)
+    drift = min((a_clean - a_noisy) % 1440, (a_noisy - a_clean) % 1440)
+    assert drift <= 15
+
+
+def test_balanced_anchor_is_deterministic():
+    ts = _prompts([(d, [(9, 0), (14, 0), (19, 0)]) for d in range(1, 15)])
+    assert compute_balanced_anchor(ts, NOW) == compute_balanced_anchor(ts, NOW)
+
+
+def test_balanced_anchor_beats_or_matches_every_other_phase_on_peak_load():
+    """It's an optimiser — verify it actually returns an optimum, not just a plausible number."""
+    ts = _prompts([(d, [(8, 0), (9, 0), (10, 0), (15, 0), (21, 0)]) for d in range(1, 11)])
+    counts = usage_histogram(ts, NOW)
+    best = compute_balanced_anchor(ts, NOW)
+    best_peak = max(segment_loads(counts, best))
+    for phi in range(0, 1440, 7):
+        assert max(segment_loads(counts, phi)) >= best_peak

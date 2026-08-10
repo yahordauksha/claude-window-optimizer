@@ -5,7 +5,6 @@ constants are what they are (fixed 4 slots, 5h10m spacing, no repo
 attachment, local-wall-clock anchor converted to UTC at generation time).
 """
 
-import math
 from datetime import datetime, timedelta, timezone
 
 # Strictly more than 5h (300min) or a ping can land inside a still-open
@@ -21,13 +20,13 @@ SLOT_COUNT = 4
 
 MINUTES_PER_DAY = 24 * 60
 
+# The usage window each reset opens. The whole anchor computation is
+# about where the *uncovered* remainder of the day lands (see
+# uncovered_offsets below), so this length is load-bearing, not trivia.
+WINDOW_MINUTES = 300
+
 # Only consider a day "logged" if activity fell in this trailing window.
 DEFAULT_TRAILING_DAYS = 28
-
-# Below this many same-weekday samples, don't let the weekday-specific
-# average dominate — blend it with the all-days average instead.
-MIN_WEEKDAY_SAMPLES_FOR_FULL_WEIGHT = 2
-SAME_WEEKDAY_WEIGHT = 0.7
 
 # Below this many distinct logged days, don't trust a computed anchor at
 # all — a single day's data (e.g. the very first log entry ever written,
@@ -120,22 +119,108 @@ def first_prompt_per_day(timestamps):
     return list(earliest_by_day.values())
 
 
-def _circular_mean_minutes(minutes_of_day_list):
-    """Mean time-of-day via vector averaging on the 24h circle.
+def usage_histogram(timestamps, now, trailing_days=DEFAULT_TRAILING_DAYS):
+    """Count of logged prompts per minute-of-day across the trailing window.
 
-    A plain arithmetic mean breaks near midnight (23:45 and 00:15 average
-    to ~12:00, not ~00:00) — this is the correct general solution, not
-    just an edge case fix; it's used for every anchor computation, not
-    conditionally applied near midnight.
+    Uses *every* prompt, not one per day. The thing being estimated is how
+    much budget each window absorbs, and that's a function of total volume
+    in that window — throwing away all but the first prompt of each day
+    would discard almost all of the signal.
     """
-    if not minutes_of_day_list:
+    cutoff = now - timedelta(days=trailing_days)
+    counts = [0] * MINUTES_PER_DAY
+    for ts in timestamps:
+        if ts >= cutoff:
+            counts[ts.hour * 60 + ts.minute] += 1
+    return counts
+
+
+def _doubled_prefix(counts):
+    """Prefix sums over counts+counts, so any wrapping range is an O(1) subtraction."""
+    doubled = counts + counts
+    pre = [0] * (len(doubled) + 1)
+    for i, c in enumerate(doubled):
+        pre[i + 1] = pre[i] + c
+    return pre
+
+
+def segment_lengths():
+    """Minutes each reset is 'responsible for', partitioning the full 24h.
+
+    Deliberately a partition, not the union of the 5h windows themselves.
+    Windows cover 300 of each 310-minute stretch, and only 300 of the final
+    510-minute overnight stretch — but the leftover minutes are *not* free:
+    a prompt there opens a window itself, at an uncontrolled time. Scoring
+    them as unowned created a degenerate optimum where the best-scoring
+    schedule was the one that hid all of your usage in the gaps.
+    """
+    head = [PING_INTERVAL_MINUTES] * (SLOT_COUNT - 1)
+    return head + [MINUTES_PER_DAY - sum(head)]
+
+
+def segment_loads(counts, anchor_minutes):
+    """Prompts riding on each reset's budget, for a given anchor. Every prompt counted once."""
+    pre = _doubled_prefix(counts)
+    loads = []
+    start = anchor_minutes % MINUTES_PER_DAY
+    for length in segment_lengths():
+        loads.append(pre[start + length] - pre[start])
+        start = (start + length) % MINUTES_PER_DAY
+    return loads
+
+
+def _center_of_longest_run(phis):
+    """Middle of the longest circular run in a sorted list of candidate minutes.
+
+    Ties are common with sparse data (many phases score identically). Picking
+    the centre of the widest tied band puts the schedule in the middle of the
+    plateau rather than teetering on its edge, where one new prompt next week
+    would flip it.
+    """
+    present = set(phis)
+    if len(present) == MINUTES_PER_DAY:
+        return 0
+    best_start, best_len = phis[0], 0
+    for start in (p for p in phis if (p - 1) % MINUTES_PER_DAY not in present):
+        length = 0
+        while (start + length) % MINUTES_PER_DAY in present:
+            length += 1
+        if length > best_len:
+            best_start, best_len = start, length
+    return (best_start + best_len // 2) % MINUTES_PER_DAY
+
+
+def compute_balanced_anchor(timestamps, now, trailing_days=DEFAULT_TRAILING_DAYS):
+    """Anchor (minutes since local midnight) that spreads real usage most evenly across windows.
+
+    You get blocked when a single window absorbs more work than its budget
+    allows, then wait for it to expire. So the anchor to pick is the one that
+    minimises the busiest window's share of your actual prompts — that
+    maximises how much you could do before any window runs dry, and it puts a
+    reset partway through a long working block instead of leaving the whole
+    block riding on one budget.
+
+    Ranked by (peak segment load, load on the long overnight segment). The
+    second term breaks ties toward leaving the 510-minute stretch — the one
+    with the least window coverage — over the quietest hours.
+
+    Returns None if nothing is logged in the trailing window.
+    """
+    counts = usage_histogram(timestamps, now, trailing_days)
+    if sum(counts) == 0:
         return None
-    angles = [2 * math.pi * m / MINUTES_PER_DAY for m in minutes_of_day_list]
-    sin_sum = sum(math.sin(a) for a in angles)
-    cos_sum = sum(math.cos(a) for a in angles)
-    mean_angle = math.atan2(sin_sum, cos_sum)
-    mean_minutes = (mean_angle / (2 * math.pi)) * MINUTES_PER_DAY
-    return round(mean_minutes) % MINUTES_PER_DAY
+
+    best_key = None
+    best_phis = []
+    for phi in range(MINUTES_PER_DAY):
+        loads = segment_loads(counts, phi)
+        key = (max(loads), loads[-1])
+        if best_key is None or key < best_key:
+            best_key, best_phis = key, [phi]
+        elif key == best_key:
+            best_phis.append(phi)
+
+    return _center_of_longest_run(best_phis)
 
 
 def logged_days_in_window(timestamps, now, trailing_days=DEFAULT_TRAILING_DAYS):
@@ -148,41 +233,6 @@ def logged_days_in_window(timestamps, now, trailing_days=DEFAULT_TRAILING_DAYS):
     cutoff = now - timedelta(days=trailing_days)
     recent = [ts for ts in timestamps if ts >= cutoff]
     return len(first_prompt_per_day(recent))
-
-
-def compute_weighted_anchor(timestamps, now, trailing_days=DEFAULT_TRAILING_DAYS):
-    """Day-of-week-weighted anchor (minutes since local midnight), or None if no data in the trailing window.
-
-    Splits first-of-day times into "same weekday as `now`" and "all days,"
-    blends them (70/30) once there are enough same-weekday samples to be
-    more than noise, otherwise falls back to the all-days average alone.
-    """
-    cutoff = now - timedelta(days=trailing_days)
-    recent = [ts for ts in timestamps if ts >= cutoff]
-    if not recent:
-        return None
-
-    first_of_day = first_prompt_per_day(recent)
-    all_minutes = [ts.hour * 60 + ts.minute for ts in first_of_day]
-
-    today_weekday = now.weekday()
-    same_weekday_minutes = [ts.hour * 60 + ts.minute for ts in first_of_day if ts.weekday() == today_weekday]
-
-    all_mean = _circular_mean_minutes(all_minutes)
-
-    if len(same_weekday_minutes) >= MIN_WEEKDAY_SAMPLES_FOR_FULL_WEIGHT:
-        weekday_mean = _circular_mean_minutes(same_weekday_minutes)
-        # Blend via the vector sum, not a linear average of the two
-        # angles — same circular-mean reasoning applies to combining two
-        # already-circular means.
-        a1 = 2 * math.pi * weekday_mean / MINUTES_PER_DAY
-        a2 = 2 * math.pi * all_mean / MINUTES_PER_DAY
-        sin_sum = SAME_WEEKDAY_WEIGHT * math.sin(a1) + (1 - SAME_WEEKDAY_WEIGHT) * math.sin(a2)
-        cos_sum = SAME_WEEKDAY_WEIGHT * math.cos(a1) + (1 - SAME_WEEKDAY_WEIGHT) * math.cos(a2)
-        blended_angle = math.atan2(sin_sum, cos_sum)
-        return round((blended_angle / (2 * math.pi)) * MINUTES_PER_DAY) % MINUTES_PER_DAY
-
-    return all_mean
 
 
 def current_utc_offset(now_local=None):

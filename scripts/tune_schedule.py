@@ -32,7 +32,7 @@ from window_optimizer.paths import LOG_PATH  # noqa: E402
 from window_optimizer.schedule import (  # noqa: E402
     MIN_LOGGED_DAYS_TO_TRUST_ANCHOR,
     build_schedule,
-    compute_weighted_anchor,
+    compute_balanced_anchor,
     current_utc_offset,
     logged_days_in_window,
     parse_log_timestamps,
@@ -67,7 +67,7 @@ def main():
             )
         )
         sys.exit(0)
-    new_anchor_minutes = compute_weighted_anchor(timestamps, now_local)
+    new_anchor_minutes = compute_balanced_anchor(timestamps, now_local)
     if new_anchor_minutes is None:
         print(json.dumps({"error": "no_log_data"}))
         sys.exit(0)
