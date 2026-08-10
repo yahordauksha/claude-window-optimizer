@@ -125,7 +125,7 @@ Per slot:
 }
 ```
 
-`"mcp_connections": []` is explicit and load-bearing — see STEP 5b.
+`"mcp_connections": []` is sent to make intent legible, but it is **confirmed ignored** — the server attaches account-default connectors regardless. STEP 5b is what actually removes them. Don't mistake this field for the fix.
 
 Record each returned `trigger_id` against its slot.
 
@@ -135,11 +135,12 @@ Record each returned `trigger_id` against its slot.
 
 For **each** created routine, call `{"action": "get", "trigger_id": "<id>"}` and check the returned object:
 
-1. **`mcp_connections` is non-empty** → call `{"action": "update", "trigger_id": "<id>", "body": {"clear_mcp_connections": true}}`, then `get` **again** to confirm it's now `[]`. (`clear_mcp_connections` is verified to work.) If it's still non-empty after the clear, **stop everything**: report which routine, that it has connectors you couldn't remove, and that it must be deleted manually at https://claude.ai/code/routines. Do not create further routines.
+1. **`mcp_connections` is non-empty** → expect this; it happens on every create. Call `{"action": "update", "trigger_id": "<id>", "body": {"clear_mcp_connections": true}}`, then `get` **again** to confirm it's now `[]`. (Verified working across 4 real routines.) If it's still non-empty after the clear, **stop everything**: report which routine, that it has connectors you couldn't remove, and that it must be deleted manually at https://claude.ai/code/routines. Do not create further routines.
 2. **`session_context.allowed_tools` differs from what STEP 2c returned for that slot** → **stop everything**, report the exact difference, and say the routine must be deleted manually. Never "fix" a tool grant by guessing.
 3. **`cron_expression` differs from what was sent** → same: stop and report.
+4. **`enabled` is not `true`** → don't silently re-enable it; the user may have turned it off deliberately. Note it in STEP 7's report as one extra line.
 
-Only once every routine passes may you proceed. Print nothing about this step unless something failed — a passing verification is not news.
+Only once every routine passes may you proceed. Print nothing about this step unless something failed or check 4 tripped — a passing verification is not news.
 
 ## STEP 6 — Persist local state (print nothing)
 

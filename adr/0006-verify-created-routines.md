@@ -21,7 +21,9 @@ Worth noting what *wasn't* wrong: `allowed_tools` was correctly set to `["WebFet
 - **`allowed_tools` differs from `allowed_tools_for_kind`'s return** → stop everything and report the exact difference. Never repair a tool grant by guessing what it should be.
 - **`cron_expression` differs from what was sent** → stop and report. A schedule that isn't what was confirmed isn't a schedule the user agreed to.
 
-**`"mcp_connections": []` is also now sent explicitly in the create body.** Belt and braces: it may prevent the attachment outright on some accounts, and it makes the intent legible in the request itself. STEP 5b stays regardless — an explicit field that the server ignores is exactly the failure mode this ADR exists for.
+**`"mcp_connections": []` is also sent explicitly in the create body — but it does *not* work, and this is now confirmed rather than hoped.** The first live create after writing this ADR sent an explicit empty list and the server attached all five connectors anyway. So the field is kept only because it makes the request's intent legible; it is **not** a remedy, and nobody should read its presence as one. **`clear_mcp_connections` after creation is the only mechanism that actually works**, verified by independent read-back on all four routines.
+
+That outcome is worth stating plainly because it's the exact scenario this ADR was written to catch, and it happened on the very next create: an explicit field, silently ignored. Had STEP 5b not existed, the "fix" would have shipped as a one-line change to the request body, looked correct in review, and left every routine still carrying connectors.
 
 **A passing verification prints nothing.** The check is for catching divergence, not for reassuring the user that software worked.
 
