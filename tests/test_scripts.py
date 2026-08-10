@@ -53,6 +53,46 @@ def test_compute_schedule_from_log_with_data(tmp_path):
     assert data["anchor_local_hhmm"] == "07:00"
 
 
+def test_compute_schedule_from_log_with_only_one_days_data_is_insufficient(tmp_path):
+    """Regression test: a fresh install's very first log entry is /setup-window-optimizer's
+    own invocation (the UserPromptSubmit hook logs it before this script runs) — one day
+    of data must never be reported as a trustworthy real schedule."""
+    now = datetime.now(timezone.utc).astimezone()
+    (tmp_path / "prompts.log").write_text(now.isoformat() + "\n")
+    result = _run(COMPUTE_SCHEDULE, ["--from-log"], tmp_path)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["error"] == "insufficient_log_data"
+    assert data["logged_days"] == 1
+    assert data["needed_days"] == 3
+
+
+def test_compute_schedule_from_log_with_two_days_is_still_insufficient(tmp_path):
+    now = datetime.now(timezone.utc).astimezone()
+    log_lines = "\n".join(
+        (now - timedelta(days=d)).replace(hour=7, minute=0, second=0, microsecond=0).isoformat() for d in range(0, 2)
+    )
+    (tmp_path / "prompts.log").write_text(log_lines + "\n")
+    result = _run(COMPUTE_SCHEDULE, ["--from-log"], tmp_path)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["error"] == "insufficient_log_data"
+    assert data["logged_days"] == 2
+
+
+def test_compute_schedule_from_log_with_exactly_three_days_is_trusted(tmp_path):
+    now = datetime.now(timezone.utc).astimezone()
+    log_lines = "\n".join(
+        (now - timedelta(days=d)).replace(hour=7, minute=0, second=0, microsecond=0).isoformat() for d in range(0, 3)
+    )
+    (tmp_path / "prompts.log").write_text(log_lines + "\n")
+    result = _run(COMPUTE_SCHEDULE, ["--from-log"], tmp_path)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert "error" not in data
+    assert data["anchor_local_hhmm"] == "07:00"
+
+
 def test_compute_schedule_requires_exactly_one_mode(tmp_path):
     result = _run(COMPUTE_SCHEDULE, [], tmp_path)
     assert result.returncode != 0  # argparse rejects: neither --anchor nor --from-log given
