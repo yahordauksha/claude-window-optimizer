@@ -2,6 +2,9 @@
 
 Resolves [#7](https://github.com/yahordauksha/claude-window-optimizer/issues/7).
 
+> [!note] Partially superseded
+> [ADR-0003](0003-auto-detect-instead-of-asking.md) replaces this ADR's "ask the user which repo, never guess" stance with auto-detection — direct Operator feedback after seeing the question in practice. Everything else here (the kind set, WebFetch-only, `/tune-pings` never touching content) still stands.
+
 ## Context
 
 v1 shipped with every ping sending the same fixed "reply with a short acknowledgement" prompt — mechanically correct (it registers a message, which is all the window-keepalive mechanism actually needs), but the Operator pointed out it's a wasted opportunity: a ping that's obviously a no-op is also obviously disposable/confusing to anyone who sees it in their Cloud Routines list, and it could just as cheaply do something real. The Operator's own examples: midday (usually coding) → last open GitHub issue; morning → check email.

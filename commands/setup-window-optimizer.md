@@ -1,5 +1,5 @@
 ---
-description: One-time setup — computes a ping schedule from your logged activity (or asks once if there's none yet), optionally makes each ping do something genuinely useful for that time of day, and creates the 4 Cloud Routines. Explains what's happening as it goes.
+description: One-time setup — computes a ping schedule from your logged activity (or asks once if there's none yet), auto-detects a repo so pings check real open issues instead of being a no-op (no extra question asked), and creates the 4 Cloud Routines. Explains what's happening as it goes.
 allowed-tools: Bash(python3 *:*), Bash(cat *:*), ToolSearch, RemoteTrigger, Skill, AskUserQuestion
 ---
 
@@ -36,22 +36,27 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --from-log
 
 Either way, you now have a JSON object with `anchor_local_hhmm`, `utc_offset_hours`, and `slots` (4 entries, each with `local_hhmm`, `utc_hhmm`, `cron_expression`).
 
-## STEP 2b — Ask (once, optional) whether pings should do something useful
+## STEP 2b — Auto-detect a repo for useful pings (no question asked)
 
-Ask directly, in one question: *"Each ping can just be a no-op keep-alive, or it can check something small and useful for that time of day — e.g. if you're usually coding around midday, that ping could show your most recently updated open GitHub issue instead. Want that? If so, roughly describe your day (e.g. 'mornings: email, midday: coding, evenings: wrap-up') and, if coding is part of it, which public GitHub repo to check. Otherwise just say no and every ping stays a simple keep-alive."*
+Don't ask what to check — infer it. Run:
 
-This is genuinely optional — a "no" (or silence on which repo) is a complete, valid answer. Don't press for it.
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/detect_repo.py"
+```
 
-**v1 only ships one real check kind: GitHub open issues, via the public REST API, for a repo the user names.** If the user's description mentions something this doesn't cover (email, calendar, anything needing an authenticated connector) — say plainly that's not built yet (see `adr/0002-useful-ping-content.md`), not silently ignored. Don't fabricate a check you can't actually run.
+This tries the current project's own git remote first, falls back to the account's most recently pushed-to public repo via `gh`, and confirms whatever it finds is actually public before returning it (a private repo would just silently fail the ping's unauthenticated GitHub API call otherwise — see `adr/0002-useful-ping-content.md`/`adr/0003-auto-detect-instead-of-asking.md`). Returns `{"repo": "owner/name"}` or `{"repo": null}`.
+
+- If a repo was found: every slot's ping checks that repo's open issues (STEP 2c) — anyone using this plugin is a Claude Code user, i.e. almost certainly working on *something*, so defaulting useful-over-no-op is the reasonable call, not a wild guess.
+- If nothing was found (no git remote, `gh` unavailable/unauthenticated, no public repos): every slot falls back to a plain keep-alive. Mention this plainly in STEP 4's proposal (one line, not an apology) — the user can always ask for a specific repo afterward if they want one.
+
+**v1 only ships one real check kind: GitHub open issues, via the public REST API.** If none was auto-detected, don't ask what else the user might want checked (email, calendar) — those aren't built (see the ADRs above); say so only if the user brings it up themselves, don't volunteer a gap nobody asked about.
 
 ## STEP 2c — Assign a content kind to each slot
 
-This is a judgment call, not a script — read the user's description (if given) and each slot's `local_hhmm` from STEP 2, and assign each of the 4 slots one of:
+Deterministic, not a judgment call, given STEP 2b's result:
 
-- **`github-issues`** — if the slot's local time plausibly falls in a period the user described as coding/dev work, AND a public repo was named. Needs `owner/name` format; if the user gave something else (a URL, just a name), normalize it.
-- **`simple`** — everything else: no rhythm description given, the slot doesn't match any described period, the matching period wasn't "coding," or no repo was named.
-
-Never guess a repo the user didn't name. Never assign `github-issues` to a private repo — the WebFetch call uses the *public*, unauthenticated GitHub API and will just fail for a private one; if the user names a private repo, say so plainly and use `simple` for that slot instead of silently failing later.
+- **Repo found** → every slot gets `github-issues` for that repo.
+- **No repo found** → every slot gets `simple`.
 
 For each slot, run:
 ```bash
@@ -73,7 +78,7 @@ Load `RemoteTrigger` via `ToolSearch select:RemoteTrigger`, then call `{"action"
 Present all of this together, once, before creating anything (per this project's safety surface — Cloud Routine creation is never a silent apply). Lead with the two explanations from the top of this file if you haven't already said them this run — don't assume STEP 2 already covered it thoroughly enough.
 
 - The 4 ping times, in the user's local time (from `slots[].local_hhmm`) and the UTC cron each maps to.
-- **What each slot actually does** — `simple` (keep-alive only) or `github-issues` (which repo) — per slot, from STEP 2c. Don't just say "4 pings"; say what each one does.
+- **What every ping actually does** — either "all 4 check `owner/name`'s open issues" (repo found, STEP 2b) or "all 4 are plain keep-alives (no repo auto-detected)" — one line, not a per-slot repeat, since v1 assigns the same kind to all 4 slots.
 - Model: `claude-haiku-4-5-20251001` (cheapest available — even a `github-issues` check is a single small WebFetch + a short summary, not real work).
 - Tool grant per slot, from STEP 2c's `allowed_tools` — empty for `simple`, `["WebFetch"]` for `github-issues`. No repo checkout, no MCP connectors, no broader tool access than that (see `adr/0002-useful-ping-content.md`).
 - If STEP 3's `list` call surfaced any pre-existing routine that looks like an old ad-hoc ping setup (e.g. named "Start session at ..."), mention it and suggest the user disable/delete it manually at https://claude.ai/code/routines once the new schedule is confirmed working — routines can't be deleted via the API, so this is always a manual step, never something this command does for them.
@@ -136,11 +141,13 @@ Concise, no preamble, but say what each ping actually does — this is the last 
 
 ```
 Created 4 ping routines (5h10m apart from a <HH:MM> anchor) — these
-will show up in your Cloud Routines list at claude.ai/code/routines:
-  <HH:MM local> / <HH:MM UTC> — keep-alive
-  <HH:MM local> / <HH:MM UTC> — <owner/name> open issues
-  <HH:MM local> / <HH:MM UTC> — keep-alive
-  <HH:MM local> / <HH:MM UTC> — keep-alive
+will show up in your Cloud Routines list at claude.ai/code/routines.
+Each checks <owner/name>'s open issues (or: "is a plain keep-alive —
+no repo auto-detected"):
+  <HH:MM local> / <HH:MM UTC>
+  <HH:MM local> / <HH:MM UTC>
+  <HH:MM local> / <HH:MM UTC>
+  <HH:MM local> / <HH:MM UTC>
 
 Logging is already active (bundled hook). Run /tune-pings weekly to
 re-anchor as your habits drift — you'll get a reminder after 7 days.
@@ -153,6 +160,6 @@ If an old ad-hoc routine was flagged in STEP 4, repeat the one-line suggestion t
 - Never create routines a second time if `routines.json` already shows 4 installed — direct to `/tune-pings` instead.
 - Never create or modify a Cloud Routine without STEP 4's explicit batch confirmation first.
 - Never hardcode an `environment_id` — always resolve it per STEP 3.
-- Never assign `github-issues` to a repo the user didn't explicitly name, and never to a private repo — fall back to `simple` and say why.
+- Never ask which repo to use, or whether the user wants useful pings — auto-detect (STEP 2b) and default to useful when a repo is found. Never assign `github-issues` to a repo `detect_repo.py` didn't confirm public.
 - Never grant a tool or attach a connector beyond what STEP 2c's `allowed_tools_for_kind` actually returns for that slot — the tool grant is derived from tested code, not composed ad hoc.
 - Never invent a check kind beyond `simple`/`github-issues` — if the user asks for something this doesn't support (email, calendar, private repos), say so plainly instead of approximating it.

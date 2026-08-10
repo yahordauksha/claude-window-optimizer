@@ -22,7 +22,7 @@ Same discipline as this repo's installed `implement` skill: branch/worktree isol
 
 ### Design decisions are the Operator's to make
 
-The ping-spacing mechanism, how `/tune-pings` applies a schedule update, and what a ping's content is allowed to be are resolved — see `adr/0001-cloud-routine-scheduling-constraints.md` and `adr/0002-useful-ping-content.md`, both grounded in real, verified behavior, not assumed. For anything that would change those decisions, or any other change that materially reshapes the plugin (e.g. a new ping content kind), stop and ask using a concrete options-based question rather than reopening either ADR's reasoning ad hoc.
+The ping-spacing mechanism, how `/tune-pings` applies a schedule update, what a ping's content is allowed to be, and how that content gets chosen (auto-detected, never asked — see `adr/0003-auto-detect-instead-of-asking.md`, a direct Operator correction to ADR-0002's original "ask" stance) are resolved — see `adr/0001-cloud-routine-scheduling-constraints.md` through `adr/0003-auto-detect-instead-of-asking.md`, all grounded in real, verified behavior, not assumed. For anything that would change those decisions, or any other change that materially reshapes the plugin (e.g. a new ping content kind), stop and ask using a concrete options-based question rather than reopening any ADR's reasoning ad hoc.
 
 ## Agent Safety Surface — Never Touch Autonomously
 
