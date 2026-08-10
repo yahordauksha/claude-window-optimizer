@@ -12,7 +12,12 @@ Usage:
 
 Prints one JSON object to stdout:
   {"anchor_local_hhmm": "06:00", "utc_offset_hours": 2.0, "slots": [...]}
-  or {"error": "no_log_data"} if --from-log finds nothing in the trailing window.
+  or {"error": "no_log_data"} if --from-log finds nothing at all in the trailing window
+  or {"error": "insufficient_log_data", "logged_days": N, "needed_days": M} if there's
+    *some* data but fewer than MIN_LOGGED_DAYS_TO_TRUST_ANCHOR distinct days of it —
+    e.g. a fresh install where the only log entry is /setup-window-optimizer's own
+    invocation (the UserPromptSubmit hook logs it before this script ever runs). A
+    single day's data isn't a pattern; both error cases fall back to asking.
 """
 
 import argparse
@@ -24,10 +29,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from window_optimizer.paths import LOG_PATH  # noqa: E402
 from window_optimizer.schedule import (  # noqa: E402
+    MIN_LOGGED_DAYS_TO_TRUST_ANCHOR,
     build_schedule,
     compute_weighted_anchor,
     current_utc_offset,
     format_hhmm,
+    logged_days_in_window,
     parse_hhmm,
     parse_log_timestamps,
     utc_now,
@@ -51,7 +58,23 @@ def main():
             sys.exit(1)
     else:
         timestamps = parse_log_timestamps(LOG_PATH)
-        anchor_minutes = compute_weighted_anchor(timestamps, utc_now().astimezone())
+        now = utc_now().astimezone()
+        days_logged = logged_days_in_window(timestamps, now)
+        if days_logged == 0:
+            print(json.dumps({"error": "no_log_data"}))
+            sys.exit(0)
+        if days_logged < MIN_LOGGED_DAYS_TO_TRUST_ANCHOR:
+            print(
+                json.dumps(
+                    {
+                        "error": "insufficient_log_data",
+                        "logged_days": days_logged,
+                        "needed_days": MIN_LOGGED_DAYS_TO_TRUST_ANCHOR,
+                    }
+                )
+            )
+            sys.exit(0)
+        anchor_minutes = compute_weighted_anchor(timestamps, now)
         if anchor_minutes is None:
             print(json.dumps({"error": "no_log_data"}))
             sys.exit(0)

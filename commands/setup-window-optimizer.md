@@ -28,8 +28,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --from-log
 
 (`CLAUDE_PLUGIN_ROOT` is the plugin's own install directory — always use it here, never a bare relative `scripts/...` path, since this command can run with the working directory set to whatever project the user has open, not this plugin's own directory.)
 
-- If this returns a real schedule (not `{"error": "no_log_data"}`): the logging hook already has enough activity to compute a real anchor. Skip to STEP 2b.
-- If it returns `{"error": "no_log_data"}`: this is a fresh install with no logged activity yet. Ask the user, once, for a rough start-of-day in their local time (a plain question or `AskUserQuestion` — e.g. "What time do you typically start working? (HH:MM, your local time)"). Then run:
+- If this returns a real schedule (no `error` key): the logging hook has at least 3 distinct days of activity, enough to trust a computed anchor. Skip to STEP 2b.
+- If it returns `{"error": "no_log_data"}` or `{"error": "insufficient_log_data", "logged_days": N, "needed_days": 3}`: not enough to trust yet. **Say honestly which one it is** — don't blur "nothing logged" and "a little logged, not enough" into the same generic message (e.g. `insufficient_log_data` with `logged_days: 1` almost always just means this very invocation is the first thing that ever got logged — the `UserPromptSubmit` hook logs the `/setup-window-optimizer` prompt itself before this step ever runs, so one day of "data" here isn't a real pattern, it's just right now). Ask the user, once, for a rough start-of-day in their local time (a plain question or `AskUserQuestion` — e.g. "What time do you typically start working? (HH:MM, your local time)"). Then run:
   ```bash
   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --anchor <HH:MM>
   ```

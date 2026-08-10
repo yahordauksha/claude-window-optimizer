@@ -29,6 +29,13 @@ DEFAULT_TRAILING_DAYS = 28
 MIN_WEEKDAY_SAMPLES_FOR_FULL_WEIGHT = 2
 SAME_WEEKDAY_WEIGHT = 0.7
 
+# Below this many distinct logged days, don't trust a computed anchor at
+# all — a single day's data (e.g. the very first log entry ever written,
+# which is /setup-window-optimizer's own invocation, since the
+# UserPromptSubmit hook logs it before STEP 2 reads the log back) is not
+# a "pattern," it's just whatever time setup happened to be run.
+MIN_LOGGED_DAYS_TO_TRUST_ANCHOR = 3
+
 
 def slot_minutes_from_anchor(anchor_minutes_of_day):
     """4 slot start times (minutes since local midnight), each PING_INTERVAL_MINUTES apart, wrapping at 24h."""
