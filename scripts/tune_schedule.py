@@ -31,11 +31,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from window_optimizer.paths import LOG_PATH  # noqa: E402
 from window_optimizer.schedule import (  # noqa: E402
     MIN_LOGGED_DAYS_TO_TRUST_ANCHOR,
+    MIN_PROMPTS_TO_TRUST_ANCHOR,
     build_schedule,
     compute_balanced_anchor,
     current_utc_offset,
     logged_days_in_window,
     parse_log_timestamps,
+    usage_histogram,
     utc_now,
 )
 from window_optimizer.state import read_routines_state  # noqa: E402
@@ -53,16 +55,20 @@ def main():
     if days_logged == 0:
         print(json.dumps({"error": "no_log_data"}))
         sys.exit(0)
-    if days_logged < MIN_LOGGED_DAYS_TO_TRUST_ANCHOR:
-        # Re-anchoring off one or two days would swing the whole schedule
-        # on noise. Keep the existing anchor and say so — this is the one
-        # place log-based anchoring happens now, so the guard lives here.
+    prompts_logged = sum(usage_histogram(timestamps, now_local))
+    if days_logged < MIN_LOGGED_DAYS_TO_TRUST_ANCHOR or prompts_logged < MIN_PROMPTS_TO_TRUST_ANCHOR:
+        # Both floors matter and they catch different things: too few days
+        # means no habit yet, too few prompts means the optimiser's answer is
+        # a tie-break rather than a measurement (see MIN_PROMPTS_TO_TRUST_ANCHOR
+        # for the measured swing). Keep the current schedule and say why.
         print(
             json.dumps(
                 {
                     "error": "insufficient_log_data",
                     "logged_days": days_logged,
                     "needed_days": MIN_LOGGED_DAYS_TO_TRUST_ANCHOR,
+                    "logged_prompts": prompts_logged,
+                    "needed_prompts": MIN_PROMPTS_TO_TRUST_ANCHOR,
                 }
             )
         )
