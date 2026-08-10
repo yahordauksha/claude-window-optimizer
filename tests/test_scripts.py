@@ -7,6 +7,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 COMPUTE_SCHEDULE = REPO_ROOT / "scripts" / "compute_schedule.py"
 TUNE_SCHEDULE = REPO_ROOT / "scripts" / "tune_schedule.py"
+BUILD_PING_PROMPT = REPO_ROOT / "scripts" / "build_ping_prompt.py"
 
 
 def _run(script, args, data_dir):
@@ -81,7 +82,7 @@ def test_tune_schedule_no_log_data(tmp_path):
     assert json.loads(result.stdout) == {"error": "no_log_data"}
 
 
-def test_tune_schedule_produces_diff_preserving_trigger_ids(tmp_path):
+def test_tune_schedule_produces_diff_preserving_trigger_ids_and_content_kind(tmp_path):
     routines_state = {
         "installed_at": "2026-07-01T06:00:00+00:00",
         "anchor_local_hhmm": "06:45",
@@ -92,6 +93,9 @@ def test_tune_schedule_produces_diff_preserving_trigger_ids(tmp_path):
                 "local_hhmm": "x",
                 "utc_hhmm": "x",
                 "cron_expression": f"45 {(6 + i * 5) % 24} * * *",
+                # slot 1 has real content-kind state; the rest simulate an
+                # install from before this field existed (no key at all).
+                **({"kind": "github-issues", "repo": "owner/repo"} if i == 1 else {}),
             }
             for i in range(4)
         ],
@@ -116,3 +120,38 @@ def test_tune_schedule_produces_diff_preserving_trigger_ids(tmp_path):
         assert slot["slot"] == i
         assert "old_cron_expression" in slot
         assert "new_cron_expression" in slot
+    assert data["slots"][1]["kind"] == "github-issues"
+    assert data["slots"][1]["repo"] == "owner/repo"
+    # a slot with no prior kind/repo key defaults to a plain keep-alive, never crashes
+    assert data["slots"][0]["kind"] == "simple"
+    assert data["slots"][0]["repo"] is None
+
+
+# ---- build_ping_prompt.py ----
+
+
+def test_build_ping_prompt_simple(tmp_path):
+    result = _run(BUILD_PING_PROMPT, ["--kind", "simple"], tmp_path)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["allowed_tools"] == []
+    assert "automated" in data["prompt"].lower()
+
+
+def test_build_ping_prompt_github_issues(tmp_path):
+    result = _run(BUILD_PING_PROMPT, ["--kind", "github-issues", "--repo", "owner/repo"], tmp_path)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["allowed_tools"] == ["WebFetch"]
+    assert "owner/repo" in data["prompt"]
+
+
+def test_build_ping_prompt_github_issues_without_repo_fails(tmp_path):
+    result = _run(BUILD_PING_PROMPT, ["--kind", "github-issues"], tmp_path)
+    assert result.returncode == 1
+    assert "error" in json.loads(result.stdout)
+
+
+def test_build_ping_prompt_rejects_unknown_kind(tmp_path):
+    result = _run(BUILD_PING_PROMPT, ["--kind", "not-a-kind"], tmp_path)
+    assert result.returncode != 0  # argparse choices validation rejects it

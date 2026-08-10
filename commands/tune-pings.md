@@ -15,7 +15,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tune_schedule.py"
 
 - `{"error": "not_set_up"}` — `/setup-window-optimizer` hasn't run yet. Say so plainly and stop; point at that command instead.
 - `{"error": "no_log_data"}` — no logged activity in the trailing 28 days (e.g. the hook was disabled, or this ran right after a fresh install with no usage yet). Say so plainly and stop; nothing to tune from.
-- Otherwise: a JSON object with `old_anchor_local_hhmm`, `new_anchor_local_hhmm`, `logged_days`, `trailing_days`, and `slots` (4 entries, each with `slot`, `trigger_id`, `old_cron_expression`, `new_cron_expression`, `local_hhmm`, `utc_hhmm`).
+- Otherwise: a JSON object with `old_anchor_local_hhmm`, `new_anchor_local_hhmm`, `logged_days`, `trailing_days`, and `slots` (4 entries, each with `slot`, `trigger_id`, `old_cron_expression`, `new_cron_expression`, `local_hhmm`, `utc_hhmm`, `kind`, `repo`). `kind`/`repo` describe what each ping *does* (e.g. `github-issues` checking `owner/name`) — this command never changes them, only passes them through unchanged into STEP 3's write.
 
 If `new_anchor_local_hhmm == old_anchor_local_hhmm` (schedule hasn't drifted enough to change the anchor), skip straight to STEP 4 and report that nothing changed — still write the tune-up timestamp (STEP 3), since a reminder shouldn't keep firing just because the anchor happened to land on the same value this week.
 
@@ -29,9 +29,11 @@ The Operator already authorized `/tune-pings` to update the existing 4 routines'
 
 If any single update call fails (e.g. the API rejects the cron expression, or the trigger_id no longer exists because the user deleted it manually via the web UI): stop immediately, do not proceed to the remaining slots, and report exactly which slot failed and why — do not silently skip a failed slot and continue as if the schedule is now fully consistent, and do not retry a rejected spacing with a rounded/guessed value.
 
+This command **only ever calls `update` with `cron_expression`** — never touches `job_config`, the prompt, or `allowed_tools`. A ping's content (`kind`/`repo`) is set once at `/setup-window-optimizer` time and never changes here, on purpose — re-deriving what each slot "should" check every week is a different, unbuilt feature, not something to improvise into this command's own update call.
+
 ## STEP 3 — Persist local state
 
-Update `routines.json` (via `window_optimizer.state.write_routines_state`, same shape as `/setup-window-optimizer` STEP 6 — `anchor_local_hhmm` set to the new anchor, `routines` with each slot's new `cron_expression`/`utc_hhmm`, `installed_at` carried over unchanged) and write the tune-up timestamp via `window_optimizer.state.write_tune_state(datetime.now().astimezone().isoformat())` — this is what the `SessionStart` reminder hook reads to decide whether to nag.
+Update `routines.json` (via `window_optimizer.state.write_routines_state`, same shape as `/setup-window-optimizer` STEP 6 — `anchor_local_hhmm` set to the new anchor, `routines` with each slot's new `cron_expression`/`utc_hhmm` plus its **unchanged** `kind`/`repo` from STEP 1's diff, `installed_at` carried over unchanged) and write the tune-up timestamp via `window_optimizer.state.write_tune_state(datetime.now().astimezone().isoformat())` — this is what the `SessionStart` reminder hook reads to decide whether to nag.
 
 ## STEP 4 — Report back
 
