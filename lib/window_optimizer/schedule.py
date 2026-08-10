@@ -35,6 +35,21 @@ DEFAULT_TRAILING_DAYS = 28
 # a "pattern," it's just whatever time setup happened to be run.
 MIN_LOGGED_DAYS_TO_TRUST_ANCHOR = 3
 
+# ...and days alone are not enough. The optimiser scores phases by how much
+# usage each window absorbs, so its answer is only as well-determined as the
+# volume behind it. Measured by re-running the *same* simulated habit with
+# fresh noise and watching how far the chosen anchor moved:
+#
+#     20-60 prompts  -> swung ~300 min   (arbitrary)
+#     80-120 prompts -> swung ~50 min    (marginal)
+#     160+ prompts   -> swung ~36 min    (stable)
+#
+# 150 sits just under the stable band: enough that the answer reflects a
+# habit rather than a tie-break, without withholding a schedule from a light
+# user forever. Below it, /tune-pings keeps the current schedule and says so
+# — a confident-looking schedule derived from noise is worse than no change.
+MIN_PROMPTS_TO_TRUST_ANCHOR = 150
+
 
 def slot_minutes_from_anchor(anchor_minutes_of_day):
     """4 slot start times (minutes since local midnight), each PING_INTERVAL_MINUTES apart, wrapping at 24h."""

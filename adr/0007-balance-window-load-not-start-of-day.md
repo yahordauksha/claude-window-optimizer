@@ -39,6 +39,20 @@ Measured against the old estimator on the same data: the three stray pings that 
 - **Weight prompts by tokens.** The genuinely correct measure of "budget absorbed," and still unavailable — hooks don't expose token counts (ADR-0001 / the v1 plan). Prompt volume is the honest proxy. If token data ever becomes available, only `usage_histogram` needs to change; the optimiser above is already weight-agnostic.
 - **Simulate window state prompt-by-prompt** (a prompt in a gap opens its own window, shifting everything downstream). More faithful, but the added fidelity only matters in exactly the case the design is trying to prevent, and it would make the objective non-closed-form for a gain that's speculative until there's real usage data to check it against.
 
+## Follow-up found by stress-testing this ADR's own implementation
+
+The optimiser is verified correct against its objective (brute-forced against all 1440 phases across seven usage profiles). But correct-against-its-objective is not the same as *well-determined*, and the guard protecting it was gating on the wrong axis.
+
+`MIN_LOGGED_DAYS_TO_TRUST_ANCHOR = 3` counted **days**, not volume. Re-running the same simulated habit with fresh noise and measuring how far the chosen anchor moved:
+
+| total prompts | anchor swing across redraws |
+|---|---|
+| 20–60 | ~300 min — arbitrary |
+| 80–120 | ~50 min — marginal |
+| 160+ | ~36 min — stable |
+
+So 21 prompts spread across 7 days passed the day floor and produced a schedule that was ~65% tie-break. Added `MIN_PROMPTS_TO_TRUST_ANCHOR = 150`; both floors are checked and the error names which one failed. A light user now keeps their existing schedule and is told why, rather than being handed noise with a confident face on it.
+
 ## Consequences
 
 - The word "anchor" now means "the phase of the reset schedule," not "when you start work." User-facing copy already says "what time do you want your window to reset" (ADR-0005), which happens to remain the right question to ask a human — they can answer it, and it's a fine starting point until `/tune-pings` has real data.

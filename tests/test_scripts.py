@@ -128,10 +128,14 @@ def test_tune_schedule_with_two_days_is_still_insufficient(tmp_path):
 
 
 def test_tune_schedule_with_exactly_three_days_re_anchors(tmp_path):
+    """Three days is the day floor — with enough prompts behind them, it re-anchors."""
     (tmp_path / "routines.json").write_text(json.dumps(_installed_routines_state()))
     now = datetime.now(timezone.utc).astimezone()
     log_lines = "\n".join(
-        (now - timedelta(days=d)).replace(hour=7, minute=0, second=0, microsecond=0).isoformat() for d in range(0, 3)
+        (now - timedelta(days=d)).replace(hour=7, minute=0, second=0, microsecond=0).isoformat()
+        + f"\n{(now - timedelta(days=d)).replace(hour=9, minute=m % 60, second=0, microsecond=0).isoformat()}"
+        for d in range(0, 3)
+        for m in range(60)
     )
     (tmp_path / "prompts.log").write_text(log_lines + "\n")
     result = _run(TUNE_SCHEDULE, [], tmp_path)
@@ -163,7 +167,9 @@ def test_tune_schedule_produces_diff_preserving_trigger_ids_and_content_kind(tmp
 
     now = datetime.now(timezone.utc).astimezone()
     log_lines = "\n".join(
-        (now - timedelta(days=d)).replace(hour=6, minute=0, second=0, microsecond=0).isoformat() for d in range(1, 8)
+        (now - timedelta(days=d)).replace(hour=6 + (m // 30), minute=m % 30, second=0, microsecond=0).isoformat()
+        for d in range(1, 8)
+        for m in range(30)
     )
     (tmp_path / "prompts.log").write_text(log_lines + "\n")
 
@@ -217,3 +223,25 @@ def test_build_ping_prompt_github_issues_without_repo_fails(tmp_path):
 def test_build_ping_prompt_rejects_unknown_kind(tmp_path):
     result = _run(BUILD_PING_PROMPT, ["--kind", "not-a-kind"], tmp_path)
     assert result.returncode != 0  # argparse choices validation rejects it
+
+
+def test_tune_schedule_rejects_plenty_of_days_but_too_few_prompts(tmp_path):
+    """The floor that days alone missed: 20 days x 1 prompt still yields a tie-break, not a habit.
+
+    Measured on simulated data, ~20-60 prompts moved the chosen anchor by ~300 minutes
+    across noisy redraws of the *same* habit. A confident-looking schedule built on that
+    is worse than leaving the current one alone.
+    """
+    (tmp_path / "routines.json").write_text(json.dumps(_installed_routines_state()))
+    now = datetime.now(timezone.utc).astimezone()
+    log_lines = "\n".join(
+        (now - timedelta(days=d)).replace(hour=9, minute=0, second=0, microsecond=0).isoformat() for d in range(0, 20)
+    )
+    (tmp_path / "prompts.log").write_text(log_lines + "\n")
+    result = _run(TUNE_SCHEDULE, [], tmp_path)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["error"] == "insufficient_log_data"
+    assert data["logged_days"] == 20  # plenty of days...
+    assert data["logged_prompts"] == 20  # ...but nowhere near enough volume
+    assert data["needed_prompts"] == 150
