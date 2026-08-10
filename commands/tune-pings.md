@@ -15,6 +15,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/tune_schedule.py"
 
 - `{"error": "not_set_up"}` — `/setup-window-optimizer` hasn't run yet. Say so plainly and stop; point at that command instead.
 - `{"error": "no_log_data"}` — no logged activity in the trailing 28 days (e.g. the hook was disabled, or this ran right after a fresh install with no usage yet). Say so plainly and stop; nothing to tune from.
+- `{"error": "insufficient_log_data", "logged_days": N, "needed_days": 3}` — some activity, but too few distinct days to re-anchor on without swinging the schedule around noise. Say so plainly (name the actual day count), leave the current schedule alone, and stop. Still write the tune-up timestamp (STEP 3) so the reminder doesn't nag daily about a check that correctly declined to act.
 - Otherwise: a JSON object with `old_anchor_local_hhmm`, `new_anchor_local_hhmm`, `logged_days`, `trailing_days`, and `slots` (4 entries, each with `slot`, `trigger_id`, `old_cron_expression`, `new_cron_expression`, `local_hhmm`, `utc_hhmm`, `kind`, `repo`). `kind`/`repo` describe what each ping *does* (e.g. `github-issues` checking `owner/name`) — this command never changes them, only passes them through unchanged into STEP 3's write.
 
 If `new_anchor_local_hhmm == old_anchor_local_hhmm` (schedule hasn't drifted enough to change the anchor), skip straight to STEP 4 and report that nothing changed — still write the tune-up timestamp (STEP 3), since a reminder shouldn't keep firing just because the anchor happened to land on the same value this week.

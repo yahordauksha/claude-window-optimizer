@@ -1,5 +1,5 @@
 ---
-description: One-time setup — computes a ping schedule from your logged activity (or asks once if there's none yet), auto-detects a repo so pings check real open issues instead of being a no-op (no extra question asked), and creates the 4 Cloud Routines. Explains what's happening as it goes.
+description: One-time setup — asks once when you usually start working, auto-detects a repo so pings check real open issues instead of being a no-op (no extra question asked), and creates the 4 Cloud Routines. Explains what's happening as it goes.
 allowed-tools: Bash(python3 *:*), Bash(cat *:*), ToolSearch, RemoteTrigger, Skill, AskUserQuestion
 ---
 
@@ -18,23 +18,25 @@ cat ~/.claude/window-optimizer/routines.json 2>/dev/null
 
 If it exists and has 4 entries under `routines`, stop and tell the user setup already ran (show the current schedule) — point them at `/tune-pings` instead of re-running this. Don't create a second set of routines.
 
-## STEP 2 — Compute the anchor
+## STEP 2 — Ask for the anchor (always — never compute it here)
 
-Before running anything, say plainly what an anchor is (see the explanation above) — do this whether or not a question ends up being asked, since even the "skip straight to a real schedule" path below still means the user should know what number is about to be shown to them.
+Explain what an anchor is (see the explanation above), then ask, once: *"What time do you usually start working? (HH:MM, your local time)"* — a plain question or `AskUserQuestion`.
+
+**Always ask. Never read the log for this.** On a first run the log is either empty or dominated by the last few minutes of installing and poking at this plugin, so anything computed from it is a faithful average of noise that reads as "roughly now" — technically correct, practically useless, and actively confusing when presented as a real pattern. Log-based anchoring belongs to `/tune-pings`, which works off a trailing 4-week window where the data actually means something. See `adr/0004-setup-always-asks-for-the-anchor.md`. `compute_schedule.py` has no `--from-log` mode anymore — don't try to reintroduce one here.
+
+With the answer:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --from-log
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --anchor <HH:MM>
 ```
 
 (`CLAUDE_PLUGIN_ROOT` is the plugin's own install directory — always use it here, never a bare relative `scripts/...` path, since this command can run with the working directory set to whatever project the user has open, not this plugin's own directory.)
 
-- If this returns a real schedule (no `error` key): the logging hook has at least 3 distinct days of activity, enough to trust a computed anchor. Skip to STEP 2b.
-- If it returns `{"error": "no_log_data"}` or `{"error": "insufficient_log_data", "logged_days": N, "needed_days": 3}`: not enough to trust yet. **Say honestly which one it is** — don't blur "nothing logged" and "a little logged, not enough" into the same generic message (e.g. `insufficient_log_data` with `logged_days: 1` almost always just means this very invocation is the first thing that ever got logged — the `UserPromptSubmit` hook logs the `/setup-window-optimizer` prompt itself before this step ever runs, so one day of "data" here isn't a real pattern, it's just right now). Ask the user, once, for a rough start-of-day in their local time (a plain question or `AskUserQuestion` — e.g. "What time do you typically start working? (HH:MM, your local time)"). Then run:
-  ```bash
-  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --anchor <HH:MM>
-  ```
+If it returns `{"error": "invalid_anchor"}`, the time didn't parse — ask again rather than guessing a correction.
 
-Either way, you now have a JSON object with `anchor_local_hhmm`, `utc_offset_hours`, and `slots` (4 entries, each with `local_hhmm`, `utc_hhmm`, `cron_expression`).
+You now have a JSON object with `anchor_local_hhmm`, `utc_offset_hours`, and `slots` (4 entries, each with `local_hhmm`, `utc_hhmm`, `cron_expression`).
+
+Mention in passing (one clause, not a paragraph) that this is a starting point `/tune-pings` will correct from real data after a few weeks — so the answer doesn't need to be precise.
 
 ## STEP 2b — Auto-detect a repo for useful pings (no question asked)
 
@@ -159,6 +161,7 @@ If an old ad-hoc routine was flagged in STEP 4, repeat the one-line suggestion t
 
 - Never create routines a second time if `routines.json` already shows 4 installed — direct to `/tune-pings` instead.
 - Never create or modify a Cloud Routine without STEP 4's explicit batch confirmation first.
+- Never derive the anchor from the log here, and never skip STEP 2's question because a log happens to exist — always ask (see ADR-0004). Setup's job is to get a deliberate starting point; `/tune-pings` is what turns it into a data-driven one.
 - Never hardcode an `environment_id` — always resolve it per STEP 3.
 - Never ask which repo to use, or whether the user wants useful pings — auto-detect (STEP 2b) and default to useful when a repo is found. Never assign `github-issues` to a repo `detect_repo.py` didn't confirm public.
 - Never grant a tool or attach a connector beyond what STEP 2c's `allowed_tools_for_kind` actually returns for that slot — the tool grant is derived from tested code, not composed ad hoc.

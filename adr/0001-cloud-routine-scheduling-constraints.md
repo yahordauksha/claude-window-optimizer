@@ -2,6 +2,9 @@
 
 Resolves [#1](https://github.com/yahordauksha/claude-window-optimizer/issues/1) — every downstream command (#2, #3) was blocked on these findings.
 
+> [!note] Partially superseded
+> [ADR-0004](0004-setup-always-asks-for-the-anchor.md) replaces this ADR's week-one/no-data anchor handling: setup now always asks for the anchor and never computes one from the log. Everything else here (the fixed 4-slot layout, 5h10m spacing, no repo attachment, non-interactive create/update) still stands.
+
 ## Context
 
 The v1 plan had five explicitly unresolved questions about what the real scheduler supports. Rather than guess, this was tested directly: `RemoteTrigger` (the API backing the `/schedule` skill and https://claude.ai/code/routines) was inspected via its `list`/`get` actions against the real account, which already had two pre-existing manually-created routines ("Start session at 7:30", "Start session at 13:00") — these turned out to be exactly the ad-hoc single/double-ping setup the plan's Problem section describes wanting to replace, and they doubled as ground truth for the API's actual shape.

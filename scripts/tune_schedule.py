@@ -14,6 +14,9 @@ Prints one JSON object to stdout:
               "kind": "simple"|"github-issues", "repo": "owner/name"|null}, ...]}
   or {"error": "not_set_up"} if /setup-window-optimizer hasn't run yet
   or {"error": "no_log_data"} if the trailing window has nothing logged
+  or {"error": "insufficient_log_data", "logged_days": N, "needed_days": M} if there's
+    some data but too few distinct days to re-anchor on without swinging the schedule
+    around noise — keep the current anchor and try again later
 
 `kind`/`repo` are passed through unchanged from the existing install —
 /tune-pings only ever re-anchors timing, never the ping's content.
@@ -27,6 +30,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from window_optimizer.paths import LOG_PATH  # noqa: E402
 from window_optimizer.schedule import (  # noqa: E402
+    MIN_LOGGED_DAYS_TO_TRUST_ANCHOR,
     build_schedule,
     compute_weighted_anchor,
     current_utc_offset,
@@ -45,6 +49,24 @@ def main():
 
     now_local = utc_now().astimezone()
     timestamps = parse_log_timestamps(LOG_PATH)
+    days_logged = logged_days_in_window(timestamps, now_local)
+    if days_logged == 0:
+        print(json.dumps({"error": "no_log_data"}))
+        sys.exit(0)
+    if days_logged < MIN_LOGGED_DAYS_TO_TRUST_ANCHOR:
+        # Re-anchoring off one or two days would swing the whole schedule
+        # on noise. Keep the existing anchor and say so — this is the one
+        # place log-based anchoring happens now, so the guard lives here.
+        print(
+            json.dumps(
+                {
+                    "error": "insufficient_log_data",
+                    "logged_days": days_logged,
+                    "needed_days": MIN_LOGGED_DAYS_TO_TRUST_ANCHOR,
+                }
+            )
+        )
+        sys.exit(0)
     new_anchor_minutes = compute_weighted_anchor(timestamps, now_local)
     if new_anchor_minutes is None:
         print(json.dumps({"error": "no_log_data"}))

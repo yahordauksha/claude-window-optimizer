@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""CLI: compute the 4-slot ping schedule, either from an explicit anchor or from the log.
+"""CLI: compute the 4-slot ping schedule from an explicit anchor time.
 
-Used by /setup-window-optimizer. All deterministic math lives in
-window_optimizer.schedule — this script is a thin CLI wrapper so the
-command can call it via Bash and parse the JSON result, rather than
-asking the model to do date/circular-mean arithmetic inline at runtime.
+Used by /setup-window-optimizer, which always asks the user for their
+rough start-of-day rather than computing one. That's deliberate: on a
+first run the log is either empty or dominated by the last few minutes
+of installing and poking at this plugin, so a "computed" anchor there
+is a faithful average of noise — technically correct, practically
+useless, and confusing to be shown as if it were a real pattern.
+
+Log-based anchoring lives exclusively in tune_schedule.py (/tune-pings),
+where the trailing-4-weeks window is long enough for the data to mean
+something. See adr/0004-setup-always-asks-for-the-anchor.md.
 
 Usage:
-  compute_schedule.py --anchor HH:MM     # anchor given directly (e.g. week-one, asked interactively)
-  compute_schedule.py --from-log         # weighted anchor computed from the prompt log
+  compute_schedule.py --anchor HH:MM
 
 Prints one JSON object to stdout:
   {"anchor_local_hhmm": "06:00", "utc_offset_hours": 2.0, "slots": [...]}
-  or {"error": "no_log_data"} if --from-log finds nothing at all in the trailing window
-  or {"error": "insufficient_log_data", "logged_days": N, "needed_days": M} if there's
-    *some* data but fewer than MIN_LOGGED_DAYS_TO_TRUST_ANCHOR distinct days of it —
-    e.g. a fresh install where the only log entry is /setup-window-optimizer's own
-    invocation (the UserPromptSubmit hook logs it before this script ever runs). A
-    single day's data isn't a pattern; both error cases fall back to asking.
+  or {"error": "invalid_anchor", "detail": "..."} (exit 1) on an unparseable time.
 """
 
 import argparse
@@ -27,58 +27,26 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
 
-from window_optimizer.paths import LOG_PATH  # noqa: E402
 from window_optimizer.schedule import (  # noqa: E402
-    MIN_LOGGED_DAYS_TO_TRUST_ANCHOR,
     build_schedule,
-    compute_weighted_anchor,
     current_utc_offset,
     format_hhmm,
-    logged_days_in_window,
     parse_hhmm,
-    parse_log_timestamps,
-    utc_now,
 )
 
 
 def main():
     parser = argparse.ArgumentParser()
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--anchor", help="explicit local anchor time, HH:MM")
-    group.add_argument("--from-log", action="store_true", help="compute a weighted anchor from the prompt log")
+    parser.add_argument("--anchor", required=True, help="local anchor time, HH:MM")
     args = parser.parse_args()
 
+    try:
+        anchor_minutes = parse_hhmm(args.anchor)
+    except ValueError as e:
+        print(json.dumps({"error": "invalid_anchor", "detail": str(e)}))
+        sys.exit(1)
+
     offset = current_utc_offset()
-
-    if args.anchor:
-        try:
-            anchor_minutes = parse_hhmm(args.anchor)
-        except ValueError as e:
-            print(json.dumps({"error": "invalid_anchor", "detail": str(e)}))
-            sys.exit(1)
-    else:
-        timestamps = parse_log_timestamps(LOG_PATH)
-        now = utc_now().astimezone()
-        days_logged = logged_days_in_window(timestamps, now)
-        if days_logged == 0:
-            print(json.dumps({"error": "no_log_data"}))
-            sys.exit(0)
-        if days_logged < MIN_LOGGED_DAYS_TO_TRUST_ANCHOR:
-            print(
-                json.dumps(
-                    {
-                        "error": "insufficient_log_data",
-                        "logged_days": days_logged,
-                        "needed_days": MIN_LOGGED_DAYS_TO_TRUST_ANCHOR,
-                    }
-                )
-            )
-            sys.exit(0)
-        anchor_minutes = compute_weighted_anchor(timestamps, now)
-        if anchor_minutes is None:
-            print(json.dumps({"error": "no_log_data"}))
-            sys.exit(0)
-
     slots = build_schedule(anchor_minutes, offset)
     print(
         json.dumps(
