@@ -1,10 +1,18 @@
 # Claude Window Optimizer
 
-A Claude Code plugin that makes your rolling 5-hour usage window reset on *your* schedule instead of whenever you happened to send your first message.
+A Claude Code plugin that makes your 5-hour usage window reset on *your* schedule instead of whenever you happened to send your first message.
 
 ## Problem
 
-Claude Code's usage limit runs on a rolling 5-hour window that starts with your first message — so if you fire off one question at 7am, your window is already half-spent by the time you actually sit down. You can reset it earlier by sending a message once the previous window has expired, but that only works if it lands *after* expiry: a message sent while a window is still open is a no-op. That means the spacing floor for a reset schedule is strictly more than 5 hours (target: 5h05m–5h15m), starting from the time you actually want your day's first fresh window.
+Claude Code's usage limit runs on a 5-hour window that starts with your first message — so if you fire off one question at 7am, your window is already half-spent by the time you actually sit down. You can reset it earlier by sending a message once the previous window has expired, but that only works if it lands *after* expiry: a message sent while a window is still open is a no-op. That means the spacing floor for a reset schedule is strictly more than 5 hours (target: 5h05m–5h15m), starting from the time you actually want your day's first fresh window.
+
+### Where that claim comes from
+
+Anthropic documents that the window exists and resets on a schedule — including the in-product message `You've hit your session limit · resets 3:45pm`. A single named reset time implies a fixed window boundary rather than a continuously sliding one.
+
+What Anthropic does **not** document is the part this plugin depends on: that a scheduled message opens a fresh window. That comes from operational use. Before this plugin existed, its author ran two hand-made Cloud Routines — "Start session at 7:30" and "Start session at 13:00", each sending a one-word message — for weeks, and observed windows starting at those ping times rather than at the first real message of the day. The annoyance that motivated building this at all (a 7am ping opening a window that then expires mid-workday) *is* that mechanic working, just badly timed.
+
+This is recorded here because it's the load-bearing assumption under everything else, and it previously lived only in the author's head — an outside reviewer correctly flagged the README for asserting it with no basis. If you're evaluating this plugin, satisfy yourself about this claim first. It's directly checkable in about five hours: send one message, note the reset time, send another after the window expires, and check whether the new reset time tracks the second message.
 
 ## What this plugin does (v1)
 
