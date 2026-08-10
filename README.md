@@ -8,16 +8,16 @@ Claude Code's usage limit runs on a rolling 5-hour window that starts with your 
 
 ## What this plugin does (v1)
 
-1. **`/setup-window-optimizer`** (run once) — computes an initial ping schedule and creates a Cloud Routine for it.
-2. **Logging** — a bundled `UserPromptSubmit` hook timestamps every prompt to a local log, no setup required.
-3. **`/tune-pings`** (run weekly) — recomputes the anchor from the trailing ~4 weeks of logged activity and updates the Routine's schedule.
-4. **Reminder** — a bundled `SessionStart` hook nudges you to run `/tune-pings` if it's been 7+ days, rate-limited to once a day.
+1. **`/setup-window-optimizer`** (run once) — computes an initial ping schedule and creates 4 Cloud Routines for it (see `adr/0001-cloud-routine-scheduling-constraints.md` for why 4, spaced 5h10m apart, never a variable count).
+2. **Logging** — a bundled `UserPromptSubmit` hook timestamps every prompt to a local log (`~/.claude/window-optimizer/prompts.log`), no setup required. Timestamps only — never prompt content.
+3. **`/tune-pings`** (run weekly) — recomputes a day-of-week-weighted anchor from the trailing ~4 weeks of logged activity and updates the 4 routines' schedules in place.
+4. **Reminder** — a bundled `SessionStart` hook nudges you to run `/tune-pings` if it's been 7+ days since the last tune-up (or since setup, if you've never run one), rate-limited to once a day.
 
-See the full v1 plan and open design questions in the project's issue tracker.
+See `adr/` for the design decisions this was built against, and the closed issues in the tracker for how each piece was scoped.
 
 ## Status
 
-Early scaffold — commands and hooks are being built out via this repo's own `.claude/` implementation pipeline (`/implement` against the ready-to-build issue queue). Not yet installable/functional.
+v1 built: both hooks, both commands, and the underlying schedule/state library are implemented and tested (`pytest` + `ruff` clean). Install the plugin and run `/setup-window-optimizer` once to get started.
 
 ## Optional: Desktop local scheduled task
 
