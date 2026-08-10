@@ -18,7 +18,22 @@ See `adr/` for the design decisions this was built against, and the closed issue
 
 ## How to install
 
-Clone the repo, then load it as a plugin for your session:
+### CLI or Desktop (persistent — recommended)
+
+Works the same way in both: `/plugin` in the CLI and the plugin browser in the Desktop app are two UIs over the same underlying mechanism. Run this once, in either surface:
+
+```
+/plugin marketplace add yahordauksha/claude-window-optimizer
+/plugin install claude-window-optimizer@claude-window-optimizer
+```
+
+(Desktop users: same two steps, just through the plugin browser's UI instead of typing the commands — see [the Desktop docs](https://code.claude.com/docs/en/desktop#install-plugins).)
+
+This is a real, verified install — the plugin registers persistently (`enabledPlugins` in your Claude Code settings) and `/setup-window-optimizer`/`/tune-pings` become available in every future session, no flag needed. Confirmed by actually running the install, checking `claude plugin list`, and opening a completely fresh session with no special flags to see both commands show up.
+
+Once installed, run `/setup-window-optimizer` once — it'll ask for a rough start-of-day if there's no logged activity yet, show you the full proposed schedule, and wait for your confirmation before creating anything.
+
+### CLI only, session-local (for trying it out without installing)
 
 ```bash
 git clone https://github.com/yahordauksha/claude-window-optimizer.git
@@ -26,9 +41,7 @@ cd claude-window-optimizer
 claude --plugin-dir "$(pwd)"
 ```
 
-Inside that session, run `/setup-window-optimizer` once — it'll ask for a rough start-of-day if there's no logged activity yet, show you the full proposed schedule, and wait for your confirmation before creating anything.
-
-`--plugin-dir` loads the plugin for that session only (this is what's actually been tested end-to-end so far). A persistent install (so it's always available without the flag) is expected to work via Claude Code's normal plugin-install mechanism, but hasn't been verified yet — treat that path as untested until this section says otherwise.
+Loads the plugin for that one session only — nothing persists, nothing to uninstall afterward. Useful for testing a local change to this repo itself; not what you want for actual day-to-day use (the hooks won't be there in your next normal session).
 
 ## Status
 
