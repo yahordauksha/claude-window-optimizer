@@ -10,9 +10,13 @@ Prints one JSON object to stdout:
   {"old_anchor_local_hhmm": "06:45", "new_anchor_local_hhmm": "06:00",
    "logged_days": 23, "trailing_days": 28,
    "slots": [{"slot": 0, "trigger_id": "trig_...", "old_cron_expression": "...",
-              "new_cron_expression": "...", "local_hhmm": "...", "utc_hhmm": "..."}, ...]}
+              "new_cron_expression": "...", "local_hhmm": "...", "utc_hhmm": "...",
+              "kind": "simple"|"github-issues", "repo": "owner/name"|null}, ...]}
   or {"error": "not_set_up"} if /setup-window-optimizer hasn't run yet
   or {"error": "no_log_data"} if the trailing window has nothing logged
+
+`kind`/`repo` are passed through unchanged from the existing install —
+/tune-pings only ever re-anchors timing, never the ping's content.
 """
 
 import json
@@ -66,6 +70,8 @@ def main():
                 "new_cron_expression": new["cron_expression"],
                 "local_hhmm": new["local_hhmm"],
                 "utc_hhmm": new["utc_hhmm"],
+                "kind": old.get("kind", "simple"),
+                "repo": old.get("repo"),
             }
         )
 
