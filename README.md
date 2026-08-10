@@ -15,6 +15,20 @@ Claude Code's usage limit runs on a rolling 5-hour window that starts with your 
 
 See `adr/` for the design decisions this was built against, and the closed issues in the tracker for how each piece was scoped.
 
+## How to install
+
+Clone the repo, then load it as a plugin for your session:
+
+```bash
+git clone https://github.com/yahordauksha/claude-window-optimizer.git
+cd claude-window-optimizer
+claude --plugin-dir "$(pwd)"
+```
+
+Inside that session, run `/setup-window-optimizer` once — it'll ask for a rough start-of-day if there's no logged activity yet, show you the full proposed schedule, and wait for your confirmation before creating anything.
+
+`--plugin-dir` loads the plugin for that session only (this is what's actually been tested end-to-end so far). A persistent install (so it's always available without the flag) is expected to work via Claude Code's normal plugin-install mechanism, but hasn't been verified yet — treat that path as untested until this section says otherwise.
+
 ## Status
 
 v1 built: both hooks, both commands, and the underlying schedule/state library are implemented and tested (`pytest` + `ruff` clean). Install the plugin and run `/setup-window-optimizer` once to get started.
