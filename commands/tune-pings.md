@@ -1,5 +1,5 @@
 ---
-description: Weekly tune-up — recomputes the ping anchor from the last ~4 weeks of logged activity and updates the 4 existing Cloud Routines in place.
+description: Weekly tune-up — recomputes when your usage window should reset, based on the last ~4 weeks of your actual activity, and shifts your 4 daily resets to match.
 allowed-tools: Bash(python3 *:*), ToolSearch, RemoteTrigger
 ---
 
@@ -38,19 +38,20 @@ Update `routines.json` (via `window_optimizer.state.write_routines_state`, same 
 
 ## STEP 4 — Report back
 
-Exactly this shape, nothing more — no preamble, no methodology explanation:
+Exactly this shape, nothing more — no preamble, no methodology explanation. Report reset times, not ping times (same rule as `/setup-window-optimizer`: the ping is the mechanism, the reset is what the user gets):
 
 ```
-New anchor: <new_anchor_local_hhmm> (was <old_anchor_local_hhmm>)
-Pings: <slot0 local_hhmm>, <slot1 local_hhmm>, <slot2 local_hhmm>, <slot3 local_hhmm>
+First reset: <new_anchor_local_hhmm> (was <old_anchor_local_hhmm>)
+All resets: <slot0 local_hhmm>, <slot1 local_hhmm>, <slot2 local_hhmm>, <slot3 local_hhmm>
 Based on <logged_days> days logged, last <trailing_days> days
 ```
 
-If the anchor didn't change: `New anchor: <hhmm> (unchanged)` in place of the first line, everything else the same.
+If the anchor didn't change: `First reset: <hhmm> (unchanged)` in place of the first line, everything else the same.
 
 ## HARD RULES
 
 - Never create or delete a routine from this command — only `update`, on the 4 `trigger_id`s already on file.
 - Never proceed past a failed update call to the remaining slots.
 - Never pad the output beyond STEP 4's exact format.
+- Never report ping/routine times as the headline — report when the window resets. Same rule as `/setup-window-optimizer`.
 - Always write the tune-up timestamp on completion, even when the anchor didn't change — the reminder hook's whole point is to track "how long since this was last checked," not "how long since it last changed."

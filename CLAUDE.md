@@ -22,9 +22,13 @@ Same discipline as this repo's installed `implement` skill: branch/worktree isol
 
 ### Design decisions are the Operator's to make
 
-The ping-spacing mechanism, how `/tune-pings` applies a schedule update, what a ping's content is allowed to be, and how that content gets chosen (auto-detected, never asked — see `adr/0003-auto-detect-instead-of-asking.md`, a direct Operator correction to ADR-0002's original "ask" stance) are resolved — see `adr/0001-cloud-routine-scheduling-constraints.md` through `adr/0004-setup-always-asks-for-the-anchor.md`, all grounded in real, verified behavior, not assumed. For anything that would change those decisions, or any other change that materially reshapes the plugin (e.g. a new ping content kind), stop and ask using a concrete options-based question rather than reopening any ADR's reasoning ad hoc.
+The ping-spacing mechanism, how `/tune-pings` applies a schedule update, what a ping's content is allowed to be, and how that content gets chosen (auto-detected, never asked — see `adr/0003-auto-detect-instead-of-asking.md`, a direct Operator correction to ADR-0002's original "ask" stance) are resolved — see `adr/0001-cloud-routine-scheduling-constraints.md` through `adr/0005-speak-in-window-resets-not-pings.md`, all grounded in real, verified behavior, not assumed. For anything that would change those decisions, or any other change that materially reshapes the plugin (e.g. a new ping content kind), stop and ask using a concrete options-based question rather than reopening any ADR's reasoning ad hoc.
 
 Note the two ADRs pull in opposite directions on purpose, and that's not an inconsistency to "resolve" later: ping **content** is auto-detected and never asked (ADR-0003), while the **anchor** is always asked and never derived (ADR-0004). The difference is whether a reliable signal actually exists at setup time — a git remote is real and inspectable on day one; a usage pattern isn't, because the only thing in the log is the user installing this plugin. Don't make either one "consistent" with the other.
+
+### Two vocabularies, on purpose
+
+Code, ADRs, and variable names describe the **mechanism** (pings, routines, anchors, cron). Everything the user reads describes the **outcome** (when their usage window resets). See `adr/0005-speak-in-window-resets-not-pings.md`. When editing a command file's user-facing copy, don't let the surrounding implementation vocabulary leak into it — that's exactly how this drifted the first time.
 
 ## Agent Safety Surface — Never Touch Autonomously
 

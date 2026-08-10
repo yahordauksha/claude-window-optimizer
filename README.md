@@ -1,17 +1,17 @@
 # Claude Window Optimizer
 
-A Claude Code plugin that keeps your rolling 5-hour usage window aligned to when you actually work, instead of resetting on a guessed ping time.
+A Claude Code plugin that makes your rolling 5-hour usage window reset on *your* schedule instead of whenever you happened to send your first message.
 
 ## Problem
 
-Claude Code's usage limit runs on a rolling 5-hour window that starts with your first message. A ping only does something if it lands *after* the current window has already expired — a ping while a window is still open is a no-op. So the spacing floor for a ping schedule is strictly more than 5 hours (target: 5h05m–5h15m), anchored to when you actually tend to start work.
+Claude Code's usage limit runs on a rolling 5-hour window that starts with your first message — so if you fire off one question at 7am, your window is already half-spent by the time you actually sit down. You can reset it earlier by sending a message once the previous window has expired, but that only works if it lands *after* expiry: a message sent while a window is still open is a no-op. That means the spacing floor for a reset schedule is strictly more than 5 hours (target: 5h05m–5h15m), starting from the time you actually want your day's first fresh window.
 
 ## What this plugin does (v1)
 
-1. **`/setup-window-optimizer`** (run once) — explains what it's doing as it goes (what an "anchor" is, that the things it creates are pings), asks once when you usually start working, and creates 4 Cloud Routines spaced out from that (see `adr/0001-cloud-routine-scheduling-constraints.md` for why 4, spaced 5h10m apart, never a variable count). It asks rather than guessing from your log on purpose — on a first run the log is just the last few minutes of installing the plugin, so a "computed" anchor there is noise dressed up as a pattern (`adr/0004-setup-always-asks-for-the-anchor.md`). Your answer doesn't need to be precise; `/tune-pings` corrects it from real data later.
-2. **Pings that can do something real, not just a no-op** — setup auto-detects a public GitHub repo (your current project's git remote, or your most recently active public repo) with no question asked; if one's found, all 4 pings check its most recently updated open issues instead of just being a keep-alive — still one cheap `WebFetch` call on the `haiku` model, not "real work." See `adr/0002-useful-ping-content.md` for what's supported today and what isn't yet (email/calendar checks aren't built — disclosed, not silently skipped), and `adr/0003-auto-detect-instead-of-asking.md` for why this is inferred rather than asked.
+1. **`/setup-window-optimizer`** (run once) — asks one question: what time you want your window to reset each day. From that it schedules 4 daily resets, 5h10m apart, so your window is fresh when you sit down and never expires mid-afternoon (see `adr/0001-cloud-routine-scheduling-constraints.md` for why 4 and why that spacing). It asks rather than guessing from your log on purpose — on a first run the log is just the last few minutes of installing the plugin, so a "computed" answer there is noise dressed up as a pattern (`adr/0004-setup-always-asks-for-the-anchor.md`). Your answer doesn't need to be precise; `/tune-pings` corrects it from real data later.
+2. **The scheduled messages do something real, not just a no-op** — the resets work by sending a small message on a schedule; setup auto-detects a public GitHub repo (your current project's git remote, or your most recently active public repo) with no question asked, and if one's found, each message reports that repo's most recently updated open issues instead of just saying "hello." Still one cheap `WebFetch` call on the `haiku` model, not "real work." See `adr/0002-useful-ping-content.md` for what's supported today and what isn't yet (email/calendar checks aren't built — disclosed, not silently skipped), and `adr/0003-auto-detect-instead-of-asking.md` for why this is inferred rather than asked.
 3. **Logging** — a bundled `UserPromptSubmit` hook timestamps every prompt to a local log (`~/.claude/window-optimizer/prompts.log`), no setup required. Timestamps only — never prompt content.
-4. **`/tune-pings`** (run weekly) — this is where log data actually gets used: recomputes a day-of-week-weighted anchor from the trailing ~4 weeks of logged activity and updates the 4 routines' schedules in place, correcting whatever you guessed at setup. Declines to re-anchor on fewer than 3 distinct logged days rather than swinging the schedule on noise. Never touches what each ping actually does — only when it fires.
+4. **`/tune-pings`** (run weekly) — this is where log data actually gets used: recomputes a day-of-week-weighted reset time from the trailing ~4 weeks of logged activity and shifts your 4 resets to match, correcting whatever you guessed at setup. Declines to re-anchor on fewer than 3 distinct logged days rather than swinging your schedule on noise. Only changes *when* the resets happen, never what the scheduled message does.
 5. **Reminder** — a bundled `SessionStart` hook nudges you to run `/tune-pings` if it's been 7+ days since the last tune-up (or since setup, if you've never run one), rate-limited to once a day.
 
 See `adr/` for the design decisions this was built against, and the closed issues in the tracker for how each piece was scoped.
@@ -31,7 +31,7 @@ Works the same way in both: `/plugin` in the CLI and the plugin browser in the D
 
 This is a real, verified install — the plugin registers persistently (`enabledPlugins` in your Claude Code settings) and `/setup-window-optimizer`/`/tune-pings` become available in every future session, no flag needed. Confirmed by actually running the install, checking `claude plugin list`, and opening a completely fresh session with no special flags to see both commands show up.
 
-Once installed, run `/setup-window-optimizer` once — it'll ask roughly when you start your day, show you the full proposed schedule, and wait for your confirmation before creating anything.
+Once installed, run `/setup-window-optimizer` once — it'll ask what time you want your window to reset, show you the full proposed schedule, and wait for your confirmation before creating anything.
 
 ### CLI only, session-local (for trying it out without installing)
 
