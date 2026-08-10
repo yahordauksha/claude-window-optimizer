@@ -35,67 +35,33 @@ def test_compute_schedule_rejects_invalid_anchor(tmp_path):
     assert json.loads(result.stdout)["error"] == "invalid_anchor"
 
 
-def test_compute_schedule_from_log_with_no_data(tmp_path):
-    result = _run(COMPUTE_SCHEDULE, ["--from-log"], tmp_path)
-    assert result.returncode == 0
-    assert json.loads(result.stdout) == {"error": "no_log_data"}
-
-
-def test_compute_schedule_from_log_with_data(tmp_path):
-    now = datetime.now(timezone.utc).astimezone()
-    log_lines = "\n".join(
-        (now - timedelta(days=d)).replace(hour=7, minute=0, second=0, microsecond=0).isoformat() for d in range(1, 6)
-    )
-    (tmp_path / "prompts.log").write_text(log_lines + "\n")
-    result = _run(COMPUTE_SCHEDULE, ["--from-log"], tmp_path)
-    assert result.returncode == 0
-    data = json.loads(result.stdout)
-    assert data["anchor_local_hhmm"] == "07:00"
-
-
-def test_compute_schedule_from_log_with_only_one_days_data_is_insufficient(tmp_path):
-    """Regression test: a fresh install's very first log entry is /setup-window-optimizer's
-    own invocation (the UserPromptSubmit hook logs it before this script runs) — one day
-    of data must never be reported as a trustworthy real schedule."""
-    now = datetime.now(timezone.utc).astimezone()
-    (tmp_path / "prompts.log").write_text(now.isoformat() + "\n")
-    result = _run(COMPUTE_SCHEDULE, ["--from-log"], tmp_path)
-    assert result.returncode == 0
-    data = json.loads(result.stdout)
-    assert data["error"] == "insufficient_log_data"
-    assert data["logged_days"] == 1
-    assert data["needed_days"] == 3
-
-
-def test_compute_schedule_from_log_with_two_days_is_still_insufficient(tmp_path):
-    now = datetime.now(timezone.utc).astimezone()
-    log_lines = "\n".join(
-        (now - timedelta(days=d)).replace(hour=7, minute=0, second=0, microsecond=0).isoformat() for d in range(0, 2)
-    )
-    (tmp_path / "prompts.log").write_text(log_lines + "\n")
-    result = _run(COMPUTE_SCHEDULE, ["--from-log"], tmp_path)
-    assert result.returncode == 0
-    data = json.loads(result.stdout)
-    assert data["error"] == "insufficient_log_data"
-    assert data["logged_days"] == 2
-
-
-def test_compute_schedule_from_log_with_exactly_three_days_is_trusted(tmp_path):
-    now = datetime.now(timezone.utc).astimezone()
-    log_lines = "\n".join(
-        (now - timedelta(days=d)).replace(hour=7, minute=0, second=0, microsecond=0).isoformat() for d in range(0, 3)
-    )
-    (tmp_path / "prompts.log").write_text(log_lines + "\n")
-    result = _run(COMPUTE_SCHEDULE, ["--from-log"], tmp_path)
-    assert result.returncode == 0
-    data = json.loads(result.stdout)
-    assert "error" not in data
-    assert data["anchor_local_hhmm"] == "07:00"
-
-
-def test_compute_schedule_requires_exactly_one_mode(tmp_path):
+def test_compute_schedule_requires_an_anchor(tmp_path):
     result = _run(COMPUTE_SCHEDULE, [], tmp_path)
-    assert result.returncode != 0  # argparse rejects: neither --anchor nor --from-log given
+    assert result.returncode != 0  # argparse rejects: --anchor is required
+
+
+def test_compute_schedule_never_reads_the_log(tmp_path):
+    """Setup always asks; it must not quietly anchor off log noise even when a log exists.
+
+    Regression test for the real bug this replaced: a fresh install's log is dominated by
+    the act of installing and poking at the plugin, so a computed anchor there was just
+    "roughly now" dressed up as a real pattern. A log full of 07:00 entries must have no
+    effect on an explicitly-passed 06:00 anchor.
+    """
+    now = datetime.now(timezone.utc).astimezone()
+    log_lines = "\n".join(
+        (now - timedelta(days=d)).replace(hour=7, minute=0, second=0, microsecond=0).isoformat() for d in range(0, 6)
+    )
+    (tmp_path / "prompts.log").write_text(log_lines + "\n")
+    result = _run(COMPUTE_SCHEDULE, ["--anchor", "06:00"], tmp_path)
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["anchor_local_hhmm"] == "06:00"
+
+
+def test_compute_schedule_rejects_from_log_flag(tmp_path):
+    """--from-log is gone on purpose (ADR-0004) — it must fail loudly, not silently no-op."""
+    result = _run(COMPUTE_SCHEDULE, ["--from-log"], tmp_path)
+    assert result.returncode != 0
 
 
 # ---- tune_schedule.py ----
@@ -120,6 +86,58 @@ def test_tune_schedule_no_log_data(tmp_path):
     result = _run(TUNE_SCHEDULE, [], tmp_path)
     assert result.returncode == 0
     assert json.loads(result.stdout) == {"error": "no_log_data"}
+
+
+def _installed_routines_state():
+    return {
+        "installed_at": "2026-07-01T06:00:00+00:00",
+        "anchor_local_hhmm": "06:00",
+        "routines": [
+            {"slot": i, "trigger_id": f"trig_{i}", "local_hhmm": "x", "utc_hhmm": "x", "cron_expression": "x"}
+            for i in range(4)
+        ],
+    }
+
+
+def test_tune_schedule_with_one_day_of_data_is_insufficient(tmp_path):
+    """Re-anchoring off a single day would swing the whole schedule on noise."""
+    (tmp_path / "routines.json").write_text(json.dumps(_installed_routines_state()))
+    now = datetime.now(timezone.utc).astimezone()
+    (tmp_path / "prompts.log").write_text(now.isoformat() + "\n")
+    result = _run(TUNE_SCHEDULE, [], tmp_path)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["error"] == "insufficient_log_data"
+    assert data["logged_days"] == 1
+    assert data["needed_days"] == 3
+
+
+def test_tune_schedule_with_two_days_is_still_insufficient(tmp_path):
+    (tmp_path / "routines.json").write_text(json.dumps(_installed_routines_state()))
+    now = datetime.now(timezone.utc).astimezone()
+    log_lines = "\n".join(
+        (now - timedelta(days=d)).replace(hour=7, minute=0, second=0, microsecond=0).isoformat() for d in range(0, 2)
+    )
+    (tmp_path / "prompts.log").write_text(log_lines + "\n")
+    result = _run(TUNE_SCHEDULE, [], tmp_path)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["error"] == "insufficient_log_data"
+    assert data["logged_days"] == 2
+
+
+def test_tune_schedule_with_exactly_three_days_re_anchors(tmp_path):
+    (tmp_path / "routines.json").write_text(json.dumps(_installed_routines_state()))
+    now = datetime.now(timezone.utc).astimezone()
+    log_lines = "\n".join(
+        (now - timedelta(days=d)).replace(hour=7, minute=0, second=0, microsecond=0).isoformat() for d in range(0, 3)
+    )
+    (tmp_path / "prompts.log").write_text(log_lines + "\n")
+    result = _run(TUNE_SCHEDULE, [], tmp_path)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert "error" not in data
+    assert data["new_anchor_local_hhmm"] == "07:00"
 
 
 def test_tune_schedule_produces_diff_preserving_trigger_ids_and_content_kind(tmp_path):
