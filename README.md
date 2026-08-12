@@ -1,8 +1,6 @@
 # Claude Window Optimizer
 
-**Hit your Claude Code limit at 10am, wait until 2pm. This spreads your day across four allowances instead of one.**
-
-Your usage allowance resets every 5 hours. A plugin that schedules those resets around when you actually work, so a heavy stretch doesn't drain one window and leave you idle for the rest of it.
+**Your Claude Code allowance resets every 5 hours — spend it fast and you sit out the rest.** This schedules four resets a day, timed around when you actually work.
 
 **1.** In a terminal:
 
