@@ -55,28 +55,15 @@ Don't explain the derivation unless asked. The reset times shown are the answer;
 
 `{"error": "invalid_anchor"}` → ask again, don't guess a correction. Otherwise you have `anchor_local_hhmm`, `utc_offset_hours`, and `slots` (4 × `local_hhmm`, `utc_hhmm`, `cron_expression`).
 
-## STEP 2b — Auto-detect a repo (silent, no question, print nothing)
+## STEP 2b — Pick what the resets will say (print nothing)
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/detect_repo.py"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_ping_prompt.py" --count 4
 ```
 
-Tries the current project's git remote, falls back to the account's most recently pushed public repo via `gh`, confirms public before returning. Returns `{"repo": "owner/name"}` or `{"repo": null}`.
+Returns `{"allowed_tools": [], "prompts": [{"key","title","prompt"}, ...]}` — four distinct prompts drawn from a fixed, inspectable pool in `lib/window_optimizer/ping_content.py`. Assign them to slots in order.
 
-- Repo found → all 4 slots use `github-issues` for it.
-- Nothing found → all 4 use `simple`. One clause in STEP 4's proposal, not an apology.
-
-Never ask which repo. Never use a repo `detect_repo.py` didn't confirm public. v1 has no other check kinds — don't volunteer that email/calendar aren't built unless the user raises it.
-
-## STEP 2c — Build the prompt + tool grant (print nothing)
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_ping_prompt.py" --kind simple
-# or:
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_ping_prompt.py" --kind github-issues --repo owner/name
-```
-
-Returns `{"prompt": "...", "allowed_tools": [...]}`. Hold both for STEP 5 and STEP 5b's check. The tool grant comes from this script — never compose one by hand.
+Every prompt is self-contained: none fetches anything, none reads anything, none needs a tool. That's deliberate and load-bearing — see `adr/0010-fixed-safe-prompt-pool.md`. Never substitute your own text, never add a prompt that references external data, and never grant a tool because a prompt "might need one." The grant is `[]`, from tested code.
 
 ## STEP 3 — Resolve the environment (print nothing)
 
@@ -111,7 +98,7 @@ Per slot:
 {
   "action": "create",
   "body": {
-    "name": "Window reset <slot+1>/4 — <local_hhmm> local",
+    "name": "Window reset <slot+1>/4 — <this slot's prompt title> (<local_hhmm> local)",
     "cron_expression": "<slots[i].cron_expression>",
     "enabled": true,
     "mcp_connections": [],
@@ -120,7 +107,7 @@ Per slot:
         "environment_id": "<from STEP 3>",
         "session_context": {
           "model": "claude-haiku-4-5-20251001",
-          "allowed_tools": "<this slot's allowed_tools from STEP 2c>"
+          "allowed_tools": []
         },
         "events": [
           {
@@ -129,7 +116,7 @@ Per slot:
               "session_id": "",
               "type": "user",
               "parent_tool_use_id": null,
-              "message": { "role": "user", "content": "<this slot's prompt from STEP 2c>" }
+              "message": { "role": "user", "content": "<this slot's prompt text from STEP 2b>" }
             }
           }
         ]
@@ -150,7 +137,7 @@ Record each returned `trigger_id` against its slot.
 For **each** created routine, call `{"action": "get", "trigger_id": "<id>"}` and check the returned object:
 
 1. **`mcp_connections` is non-empty** → expect this; it happens on every create. Call `{"action": "update", "trigger_id": "<id>", "body": {"clear_mcp_connections": true}}`, then `get` **again** to confirm it's now `[]`. (Verified working across 4 real routines.) If it's still non-empty after the clear, **stop everything**: report which routine, that it has connectors you couldn't remove, and that it must be deleted manually at https://claude.ai/code/routines. Do not create further routines.
-2. **`session_context.allowed_tools` differs from what STEP 2c returned for that slot** → **stop everything**, report the exact difference, and say the routine must be deleted manually. Never "fix" a tool grant by guessing.
+2. **`session_context.allowed_tools` is not `[]`** → **stop everything**, report the exact difference, and say the routine must be deleted manually. Never "fix" a tool grant by guessing.
 3. **`cron_expression` differs from what was sent** → same: stop and report.
 4. **`enabled` is not `true`** → don't silently re-enable it; the user may have turned it off deliberately. Note it in STEP 7's report as one extra line.
 
@@ -162,7 +149,7 @@ Inline `python3 -c "..."` with `"${CLAUDE_PLUGIN_ROOT}/lib"` on `sys.path`, call
 
 - `installed_at_iso` = `datetime.now().astimezone().isoformat()`
 - `anchor_local_hhmm` = STEP 2's value
-- `routines` = per slot: `{"slot", "trigger_id", "local_hhmm", "utc_hhmm", "cron_expression", "kind", "repo"}`
+- `routines` = per slot: `{"slot", "trigger_id", "local_hhmm", "utc_hhmm", "cron_expression", "prompt_key", "title"}`
 
 `/tune-pings` and the `SessionStart` reminder both read this. `/tune-pings` only ever changes `cron_expression`.
 
@@ -187,5 +174,5 @@ Add **one** extra line only if STEP 3 found an old ad-hoc routine: `You can dele
 - Never derive the anchor from the log; always ask (ADR-0004).
 - Never ask when *pings* should land, or lead any summary with ping/routine times — talk about window resets (ADR-0005).
 - Never offer a schedule choice without showing the times it actually produces. Compute them first and put them in the option. "And 3 more times through the day" describes nothing — it restates the question the user is trying to answer.
-- Never ask which repo to use; auto-detect (ADR-0003). Never use a repo not confirmed public.
-- Never grant a tool or connector beyond what `allowed_tools_for_kind` returns, and never hardcode an `environment_id`.
+- Never write your own prompt text or fetch anything for a reset. Use the pool (STEP 2b) verbatim.
+- Never grant a tool or connector to a reset routine at all — the prompt pool needs none (`adr/0010-fixed-safe-prompt-pool.md`). Never hardcode an `environment_id`.
