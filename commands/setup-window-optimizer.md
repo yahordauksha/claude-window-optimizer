@@ -98,7 +98,7 @@ Per slot:
 {
   "action": "create",
   "body": {
-    "name": "Window reset <slot+1>/4 — <this slot's prompt title> (<local_hhmm> local)",
+    "name": "<this slot's prompt title, e.g. Stretch>",
     "cron_expression": "<slots[i].cron_expression>",
     "enabled": true,
     "mcp_connections": [],
