@@ -119,6 +119,7 @@ def main():
                 "new_anchor_local_hhmm": f"{new_anchor_minutes // 60:02d}:{new_anchor_minutes % 60:02d}",
                 "cron_changed": cron_changed,
                 "logged_days": logged_days_in_window(timestamps, now_local),
+                "logged_prompts": prompts_logged,
                 "trailing_days": 28,
                 "slots": slots,
             }

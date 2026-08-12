@@ -206,14 +206,22 @@ def _center_of_longest_run(phis):
     present = set(phis)
     if len(present) == MINUTES_PER_DAY:
         return 0
-    best_start, best_len = phis[0], 0
+    runs = []
     for start in (p for p in phis if (p - 1) % MINUTES_PER_DAY not in present):
         length = 0
         while (start + length) % MINUTES_PER_DAY in present:
             length += 1
-        if length > best_len:
-            best_start, best_len = start, length
-    return (best_start + best_len // 2) % MINUTES_PER_DAY
+        runs.append((length, start))
+    if not runs:
+        return phis[0]
+    longest = max(r[0] for r in runs)
+    candidates = sorted(start for length, start in runs if length == longest)
+    # With several equally-wide bands (at realistic volume they're usually all
+    # width 1) picking the numerically smallest start would bias every tie toward
+    # midnight. Take the median band instead, so the choice doesn't systematically
+    # favour one end of the clock.
+    best_start = candidates[len(candidates) // 2]
+    return (best_start + longest // 2) % MINUTES_PER_DAY
 
 
 def compute_balanced_anchor(timestamps, now, trailing_days=DEFAULT_TRAILING_DAYS):

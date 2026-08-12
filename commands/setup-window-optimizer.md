@@ -24,7 +24,7 @@ If it exists with 4 entries under `routines`: print the current reset times in o
 **Print exactly one question, nothing before it:**
 
 ```
-What time do you usually start work? Your usage window will reset then,
+What time do you want your usage window to reset each day? It'll reset then
 and 3 more times through the day. (HH:MM, local — rough is fine, /tune-pings
 corrects it from real usage later.)
 ```
