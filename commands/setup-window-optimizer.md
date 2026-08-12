@@ -21,23 +21,33 @@ If it exists with 4 entries under `routines`: print the current reset times in o
 
 ## STEP 2 — Ask for the reset time (always — never compute it here)
 
-**Print exactly one question, nothing before it:**
-
-```
-What time do you want your usage window to reset each day? It'll reset then
-and 3 more times through the day. (HH:MM, local — rough is fine, /tune-pings
-corrects it from real usage later.)
-```
-
-Use `AskUserQuestion` or a plain question. No preamble, no anchor lecture — the question carries its own meaning.
-
-**Always ask. Never read the log for this.** On a first run the log is empty or dominated by the last few minutes of installing this plugin, so anything computed from it is noise that reads as "roughly now" (see `adr/0004-setup-always-asks-for-the-anchor.md`). `compute_schedule.py` has no `--from-log` mode — don't reintroduce one.
+**First compute the real schedule for each option you're about to offer.** Pick three plausible start-of-day times (07:00 / 08:00 / 09:00 unless something in context suggests otherwise) and run the script once per candidate:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --anchor <HH:MM>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --anchor 07:00
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --anchor 08:00
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --anchor 09:00
 ```
 
 (Always `${CLAUDE_PLUGIN_ROOT}`, never a bare relative `scripts/...` path — the working directory is whatever project the user has open.)
+
+**Then ask, with each option showing the times it actually produces.** Use `AskUserQuestion`:
+
+> **What time do you want your usage window to reset each day?**
+>
+> | option | description |
+> |---|---|
+> | `07:00` | Resets at 07:00, 12:10, 17:20, 22:30 |
+> | `08:00` | Resets at 08:00, 13:10, 18:20, 23:30 |
+> | `09:00` | Resets at 09:00, 14:10, 19:20, 00:30 |
+
+Fill each description from that candidate's own `slots[].local_hhmm`, joined with commas — never write the times by hand, and never reuse the illustrative ones above.
+
+**Never describe an option as "and 3 more times through the day."** That's the thing the user is trying to find out; saying it three times under three options tells them nothing and makes the choice blind. The times themselves are the description.
+
+If the user picks the free-text option, run the script once more with their answer. `{"error": "invalid_anchor"}` → ask again, don't guess a correction.
+
+**Always ask. Never read the log for this.** On a first run the log is empty or dominated by the last few minutes of installing this plugin, so anything computed from it is noise that reads as "roughly now" (see `adr/0004-setup-always-asks-for-the-anchor.md`). `compute_schedule.py` has no `--from-log` mode — don't reintroduce one.
 
 `{"error": "invalid_anchor"}` → ask again, don't guess a correction. Otherwise you have `anchor_local_hhmm`, `utc_offset_hours`, and `slots` (4 × `local_hhmm`, `utc_hhmm`, `cron_expression`).
 
@@ -172,5 +182,6 @@ Add **one** extra line only if STEP 3 found an old ad-hoc routine: `You can dele
 - Never strip or "fix" an unexpected tool grant by guessing — clear connectors via `clear_mcp_connections` (the one verified remedy), otherwise stop and hand it to the user.
 - Never derive the anchor from the log; always ask (ADR-0004).
 - Never ask when *pings* should land, or lead any summary with ping/routine times — talk about window resets (ADR-0005).
+- Never offer a schedule choice without showing the times it actually produces. Compute them first and put them in the option. "And 3 more times through the day" describes nothing — it restates the question the user is trying to answer.
 - Never ask which repo to use; auto-detect (ADR-0003). Never use a repo not confirmed public.
 - Never grant a tool or connector beyond what `allowed_tools_for_kind` returns, and never hardcode an `environment_id`.
