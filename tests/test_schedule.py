@@ -5,6 +5,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
 from window_optimizer.schedule import (
+    PING_INTERVAL_MINUTES,
+    WINDOW_MINUTES,
     build_schedule,
     compute_balanced_anchor,
     cron_for_minute_of_day,
@@ -37,9 +39,13 @@ def test_all_gaps_are_strictly_over_five_hours():
             assert gap > 300, f"anchor={anchor} produced a gap of {gap}min, at or under the 5h floor"
 
 
-def test_exactly_five_hours_is_not_valid_spacing():
-    """The floor is 'strictly more than 5h,' never 'at least 5h' — a boundary the plan calls out explicitly."""
-    assert not (300 > 300)  # sanity: the floor comparison itself must be strict, not >=
+def test_ping_interval_strictly_exceeds_the_window_length():
+    """A reset at exactly the window length would land as the window expires, which risks a
+    no-op ping (the previous window may still be open). The plan calls for strictly more
+    than 5h; assert that against the real constants, not against a literal."""
+    assert PING_INTERVAL_MINUTES > WINDOW_MINUTES
+    # ...and that the overnight segment, the only gap not equal to the interval, clears it too.
+    assert segment_lengths()[-1] > WINDOW_MINUTES
 
 
 def test_slot_count_is_always_four():
@@ -213,9 +219,12 @@ def test_balanced_anchor_is_robust_to_stray_early_prompts():
     assert drift <= 15
 
 
-def test_balanced_anchor_is_deterministic():
+def test_balanced_anchor_ignores_input_ordering():
+    """Same usage, different log ordering, same answer. Calling a pure function twice proves
+    nothing; shuffling the input actually exercises that no ordering assumption crept in."""
     ts = _prompts([(d, [(9, 0), (14, 0), (19, 0)]) for d in range(1, 15)])
-    assert compute_balanced_anchor(ts, NOW) == compute_balanced_anchor(ts, NOW)
+    shuffled = list(reversed(ts))
+    assert compute_balanced_anchor(shuffled, NOW) == compute_balanced_anchor(ts, NOW)
 
 
 def test_balanced_anchor_beats_or_matches_every_other_phase_on_peak_load():
