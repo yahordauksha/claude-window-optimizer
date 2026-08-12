@@ -43,15 +43,20 @@ Measured against the old estimator on the same data: the three stray pings that 
 
 The optimiser is verified correct against its objective (brute-forced against all 1440 phases across seven usage profiles). But correct-against-its-objective is not the same as *well-determined*, and the guard protecting it was gating on the wrong axis.
 
-`MIN_LOGGED_DAYS_TO_TRUST_ANCHOR = 3` counted **days**, not volume. Re-running the same simulated habit with fresh noise and measuring how far the chosen anchor moved:
+`MIN_LOGGED_DAYS_TO_TRUST_ANCHOR = 3` counted **days**, not volume — so 21 prompts spread across 7 days passed the floor and produced a schedule that was ~65% tie-break (930 of 1440 phases scored identically).
 
-| total prompts | anchor swing across redraws |
-|---|---|
-| 20–60 | ~300 min — arbitrary |
-| 80–120 | ~50 min — marginal |
-| 160+ | ~36 min — stable |
+The first attempt at fixing this published a stability table with no stated profile, noise model, or trial count. An independent reviewer could not reproduce it and got materially different numbers, which made the threshold it justified unfalsifiable — a judgment call presented as a measurement, in an ADR, which is the same inward-pointing failure this review was meant to catch. The method is now committed as `tools/measure_anchor_stability.py` (fixed seed, stated habit, stated jitter) and reproduces byte-identically:
 
-So 21 prompts spread across 7 days passed the day floor and produced a schedule that was ~65% tie-break. Added `MIN_PROMPTS_TO_TRUST_ANCHOR = 150`; both floors are checked and the error names which one failed. A light user now keeps their existing schedule and is told why, rather than being handed noise with a confident face on it.
+| prompts | worst spread | median spread |
+|---|---|---|
+| 20 | 355 min | 116 min |
+| 60 | 245 min | 60 min |
+| 100 | 275 min | 26 min |
+| **150** | **295 min** | 27 min |
+| **200** | **67 min** | 21 min |
+| 500 | 29 min | 8 min |
+
+The reproducible numbers **contradict the original threshold**: 150 sits inside the unstable band, not past it. The floor is now **200**, where the worst case actually collapses. Worst case rather than median is deliberate — withholding a tune-up costs a week of slightly-stale schedule, while acting on noise rewrites a schedule the user is relying on.
 
 ## Consequences
 

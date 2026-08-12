@@ -244,4 +244,77 @@ def test_tune_schedule_rejects_plenty_of_days_but_too_few_prompts(tmp_path):
     assert data["error"] == "insufficient_log_data"
     assert data["logged_days"] == 20  # plenty of days...
     assert data["logged_prompts"] == 20  # ...but nowhere near enough volume
-    assert data["needed_prompts"] == 150
+    assert data["needed_prompts"] == 200
+
+
+def test_tune_schedule_flags_cron_change_even_when_anchor_is_unchanged(tmp_path):
+    """The DST case: habit unchanged in local time, so the anchor is identical, but the
+    correct UTC cron has shifted. Keying the apply/skip decision off the anchor threw the
+    corrected cron away — exactly where schedule.py claimed /tune-pings would self-correct."""
+    now = datetime.now(timezone.utc).astimezone()
+    log_lines = "\n".join(
+        (now - timedelta(days=d)).replace(hour=6 + (m // 30), minute=m % 30, second=0, microsecond=0).isoformat()
+        for d in range(1, 8)
+        for m in range(30)
+    )
+    (tmp_path / "prompts.log").write_text(log_lines + "\n")
+
+    # First run: learn what this data actually produces.
+    (tmp_path / "routines.json").write_text(json.dumps(_installed_routines_state()))
+    first = json.loads(_run(TUNE_SCHEDULE, [], tmp_path).stdout)
+    anchor = first["new_anchor_local_hhmm"]
+
+    # Now claim the same anchor is already installed, but with stale crons (as after a
+    # DST shift). The anchor matches; the crons do not.
+    stale = {
+        "installed_at": "2026-07-01T06:00:00+00:00",
+        "anchor_local_hhmm": anchor,
+        "routines": [
+            {
+                "slot": s["slot"],
+                "trigger_id": s["trigger_id"],
+                "local_hhmm": s["local_hhmm"],
+                "utc_hhmm": s["utc_hhmm"],
+                "cron_expression": "59 23 * * *",  # deliberately wrong
+                "kind": "simple",
+                "repo": None,
+            }
+            for s in first["slots"]
+        ],
+    }
+    (tmp_path / "routines.json").write_text(json.dumps(stale))
+    result = json.loads(_run(TUNE_SCHEDULE, [], tmp_path).stdout)
+
+    assert result["new_anchor_local_hhmm"] == result["old_anchor_local_hhmm"]  # anchor unchanged...
+    assert result["cron_changed"] is True  # ...but the schedule still needs pushing
+
+
+def test_tune_schedule_reports_no_cron_change_when_already_correct(tmp_path):
+    now = datetime.now(timezone.utc).astimezone()
+    log_lines = "\n".join(
+        (now - timedelta(days=d)).replace(hour=6 + (m // 30), minute=m % 30, second=0, microsecond=0).isoformat()
+        for d in range(1, 8)
+        for m in range(30)
+    )
+    (tmp_path / "prompts.log").write_text(log_lines + "\n")
+    (tmp_path / "routines.json").write_text(json.dumps(_installed_routines_state()))
+    first = json.loads(_run(TUNE_SCHEDULE, [], tmp_path).stdout)
+
+    settled = {
+        "installed_at": "2026-07-01T06:00:00+00:00",
+        "anchor_local_hhmm": first["new_anchor_local_hhmm"],
+        "routines": [
+            {
+                "slot": s["slot"],
+                "trigger_id": s["trigger_id"],
+                "local_hhmm": s["local_hhmm"],
+                "utc_hhmm": s["utc_hhmm"],
+                "cron_expression": s["new_cron_expression"],
+                "kind": "simple",
+                "repo": None,
+            }
+            for s in first["slots"]
+        ],
+    }
+    (tmp_path / "routines.json").write_text(json.dumps(settled))
+    assert json.loads(_run(TUNE_SCHEDULE, [], tmp_path).stdout)["cron_changed"] is False

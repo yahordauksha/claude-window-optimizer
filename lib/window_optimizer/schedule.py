@@ -37,18 +37,29 @@ MIN_LOGGED_DAYS_TO_TRUST_ANCHOR = 3
 
 # ...and days alone are not enough. The optimiser scores phases by how much
 # usage each window absorbs, so its answer is only as well-determined as the
-# volume behind it. Measured by re-running the *same* simulated habit with
-# fresh noise and watching how far the chosen anchor moved:
+# volume behind it. Reproduce with:
 #
-#     20-60 prompts  -> swung ~300 min   (arbitrary)
-#     80-120 prompts -> swung ~50 min    (marginal)
-#     160+ prompts   -> swung ~36 min    (stable)
+#     python3 tools/measure_anchor_stability.py
 #
-# 150 sits just under the stable band: enough that the answer reflects a
-# habit rather than a tie-break, without withholding a schedule from a light
-# user forever. Below it, /tune-pings keeps the current schedule and says so
-# — a confident-looking schedule derived from noise is worse than no change.
-MIN_PROMPTS_TO_TRUST_ANCHOR = 150
+# which draws repeated logs from one fixed habit differing only in noise and
+# reports how far apart the chosen anchors land (worst case over all pairs):
+#
+#     prompts   worst spread   median spread
+#          20        355 min         116 min
+#          60        245 min          60 min
+#         100        275 min          26 min
+#         150        295 min          27 min      <- still wandering
+#         200         67 min          21 min      <- worst case finally collapses
+#         500         29 min           8 min
+#
+# An earlier revision of this file put the floor at 150 and cited a table with
+# no stated profile, noise model, or trial count; an outside reviewer could not
+# reproduce it, and the reproducible version above shows 150 sits inside the
+# unstable band rather than past it. 200 is where the worst case actually drops.
+# Worst case (not median) is the metric on purpose: withholding a tune-up costs
+# a week of slightly-stale schedule, while acting on noise rewrites a schedule
+# the user is relying on.
+MIN_PROMPTS_TO_TRUST_ANCHOR = 200
 
 
 def slot_minutes_from_anchor(anchor_minutes_of_day):
