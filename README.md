@@ -29,7 +29,7 @@ Four hours of dead time, sitting on a subscription you're paying for.
 
 And it's worse than it looks, because you don't get to choose when that lockout lands. The window started with your **first message of the day** — whatever it was. Ask one throwaway question at 07:12 and your four-hour wall arrives at 11:15 instead of 14:15, right in the middle of the afternoon.
 
-The usual workaround is a single scheduled ping in the morning. That's what this plugin's author ran for weeks, and it's exactly what made him build this — one ping just moves the wall, it doesn't remove it.
+The usual workaround is a single scheduled ping in the morning. I ran two of those for weeks, and that's what made me build this: one ping just moves the wall, it doesn't remove it.
 
 ## The fix
 
@@ -59,10 +59,11 @@ What hours do you usually work?
   4. Something else
 ```
 
-It asks about your day rather than asking you to pick reset times, because
-the best reset times aren't where you'd guess. Notice option 1 puts a reset
-at 13:00 — *inside* the working day. That's deliberate: a reset at 09:00 would
-leave your whole morning-to-evening block riding on a single window.
+It asks about your day rather than asking you to pick reset times, because the
+best reset times aren't where you'd guess. Notice option 1 puts a reset at 13:00 —
+*inside* the working day. That's deliberate: a reset at 09:00 would leave your whole
+morning-to-evening block riding on one allowance. I had it the other way round at
+first and measured that it gave evening workers no benefit at all.
 
 Then it shows the full plan and waits:
 
@@ -92,9 +93,9 @@ Four fits a day. They're created once and then only ever **retimed** — never a
 
 ### What the resets actually say
 
-A reset works because *a message was sent* — the content is irrelevant to the mechanism. So each routine sends one short, self-contained line drawn from a [fixed pool](lib/window_optimizer/ping_content.py): a stretch reminder, a posture check, "reply with just 'ok'". Four different ones, so your Routines list isn't four identical robots.
+A reset works because *a message was sent* — the content is irrelevant to the mechanism. So each routine sends one short, self-contained line from a [fixed pool](lib/window_optimizer/ping_content.py): a stretch reminder, a posture check, "reply with just 'ok'". Four different ones, so your Routines list isn't four identical robots.
 
-They fetch nothing and are granted no tools at all. An earlier version had them read your GitHub repo's open issue titles — which meant an unattended agent was reading text any stranger could write by filing an issue, in exchange for nothing the mechanism needed. [ADR-0010](adr/0010-fixed-safe-prompt-pool.md) has the full story.
+They fetch nothing and get no tools at all. I originally had them read your GitHub repo's open issue titles, which sounded useful until a reviewer pointed out I'd wired an unattended agent to text any stranger could write by filing an issue — in exchange for nothing the mechanism actually needed. [ADR-0010](adr/0010-fixed-safe-prompt-pool.md) has the full story.
 
 ### The weekly tune-up
 
@@ -115,15 +116,15 @@ You'll get a nudge to run it after 7 days. It refuses to act on thin data rather
 
 ## Honest limitations
 
-Worth knowing before you install. All of these are covered in more depth in [`adr/`](adr/).
+Things I'd want to know before installing someone else's plugin. All of these are covered in more depth in [`adr/`](adr/).
 
-**It counts prompts, not tokens.** Hooks don't expose token counts, so a one-word question weighs the same as a 50-file refactor. Prompt volume is a proxy, and it's the only one available.
+**It counts prompts, not tokens.** Hooks don't expose token counts, so a one-word question weighs the same as a 50-file refactor. Prompt volume is a proxy — it's the only signal I can actually get at.
 
-**It won't help everyone equally.** Measured on simulated window dynamics (`tools/window_sim.py`): a concentrated evening block gains ~31%, a 9-5 day ~15%, and someone working fifteen hours straight gains ~1% — they already chain fresh windows naturally. If your day has no idle gaps, this isn't for you.
+**It won't help everyone equally.** I simulated the window dynamics (`tools/window_sim.py`) across a few working patterns: a concentrated evening block gains ~31%, a 9-5 day ~15%, and someone working fifteen hours straight gains ~1% — they already chain fresh windows naturally. If your day has no idle gaps, this isn't for you.
 
 **The weekly cap still exists.** Session and weekly allowances are consumed at the same time. This plugin does nothing about the weekly one.
 
-**Routines can't be deleted through the API.** Setup creates four; removing them is a manual step at [claude.ai/code/routines](https://claude.ai/code/routines). That's the real cost of installing.
+**Routines can't be deleted through the API.** Setup creates four; removing them is a manual step at [claude.ai/code/routines](https://claude.ai/code/routines). That's the real cost of installing this, and I couldn't design it away.
 
 ---
 
@@ -174,9 +175,9 @@ Plus two hooks that need no setup: one logs prompt timestamps, one reminds you t
 
 ## For the curious
 
-The design decisions live in [`adr/`](adr/) — eight of them, including the ones that turned out wrong and got reversed. The scheduling math is in [`lib/window_optimizer/schedule.py`](lib/window_optimizer/schedule.py), and `python3 tools/measure_anchor_stability.py` reproduces the measurement behind its data-sufficiency guard.
+The design decisions live in [`adr/`](adr/) — ten of them, including the ones I got wrong and had to reverse. The scheduling math is in [`lib/window_optimizer/schedule.py`](lib/window_optimizer/schedule.py), and `python3 tools/measure_anchor_stability.py` reproduces the measurement behind its data-sufficiency guard.
 
-This project has been through two rounds of adversarial review by independent agents told explicitly not to trust its own documentation. Both found real bugs, and several fixes in the history exist because a reviewer proved a claim wrong — including one round where the reviewer's own most confident finding was itself wrong, and they retracted it. Open findings are tracked rather than quietly dropped.
+I put this through two rounds of adversarial review by independent agents, told explicitly not to trust the repo's own documentation. Both found real bugs. Several fixes in the history exist because a reviewer proved one of my claims wrong — including the time I'd published a measurement that turned out not to reproduce. One reviewer's own most confident finding was itself wrong and they retracted it, which is in there too. Anything still open is tracked, not quietly dropped.
 
 ## License
 
