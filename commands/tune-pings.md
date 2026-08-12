@@ -43,12 +43,13 @@ Update `routines.json` (via `window_optimizer.state.write_routines_state`, same 
 Exactly this shape, nothing more — no preamble, no methodology explanation. Report reset times, not ping times (same rule as `/setup-window-optimizer`: the ping is the mechanism, the reset is what the user gets):
 
 ```
-First reset: <new_anchor_local_hhmm> (was <old_anchor_local_hhmm>)
-All resets: <slot0 local_hhmm>, <slot1 local_hhmm>, <slot2 local_hhmm>, <slot3 local_hhmm>
-Based on <logged_days> days logged, last <trailing_days> days
+Window resets: 05:36, 10:46, 15:56, 00:26  (was 06:45, 11:55, 17:05, 22:15)
+Based on 23 days / 412 prompts, last 28 days
 ```
 
-If the anchor didn't change: `First reset: <hhmm> (unchanged)` in place of the first line, everything else the same.
+**Sort the times chronologically and never single one out as "first."** The anchor is slot 0, which is just where the optimiser's phase landed — for someone working 09:00–13:00 it can easily be `00:26`, and reporting that as "First reset: 00:26" reads as broken to the person it's correct for. There is no meaningful first reset; there are four, and they repeat daily.
+
+If `cron_changed` is false, drop the `(was ...)` clause and append ` — unchanged` to the first line.
 
 ## HARD RULES
 

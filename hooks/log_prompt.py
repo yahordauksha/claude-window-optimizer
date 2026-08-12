@@ -20,14 +20,23 @@ from window_optimizer.paths import LOG_PATH, ensure_data_dir  # noqa: E402
 
 
 def main():
+    # Write first, parse second. This hook needs no field from stdin, so letting a
+    # malformed/empty payload abort the one thing it exists to do was backwards —
+    # the timestamp was silently dropped whenever stdin wasn't valid JSON.
     try:
-        json.load(sys.stdin)  # consume stdin per the hook contract; no field is needed here
         ensure_data_dir()
         timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
         with open(LOG_PATH, "a", encoding="utf-8") as f:
             f.write(timestamp + "\n")
     except Exception as e:
         print(f"window-optimizer log_prompt hook error: {e}", file=sys.stderr)
+
+    try:
+        # Drain stdin so the writer never blocks on a full pipe, but nothing here
+        # depends on it parsing.
+        sys.stdin.read()
+    except Exception:
+        pass
     finally:
         print(json.dumps({}))
         sys.exit(0)
