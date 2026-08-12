@@ -13,7 +13,8 @@ where the trailing-4-weeks window is long enough for the data to mean
 something. See adr/0004-setup-always-asks-for-the-anchor.md.
 
 Usage:
-  compute_schedule.py --anchor HH:MM
+  compute_schedule.py --hours HH:MM-HH:MM   # preferred: derive the anchor from working hours
+  compute_schedule.py --anchor HH:MM        # use an explicit anchor as-is
 
 Prints one JSON object to stdout:
   {"anchor_local_hhmm": "06:00", "utc_offset_hours": 2.0, "slots": [...]}
@@ -28,6 +29,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
 
 from window_optimizer.schedule import (  # noqa: E402
+    anchor_for_working_hours,
     build_schedule,
     current_utc_offset,
     format_hhmm,
@@ -37,11 +39,19 @@ from window_optimizer.schedule import (  # noqa: E402
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--anchor", required=True, help="local anchor time, HH:MM")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--hours", help="working hours, HH:MM-HH:MM (anchor is derived from these)")
+    group.add_argument("--anchor", help="local anchor time, HH:MM, used as-is")
     args = parser.parse_args()
 
     try:
-        anchor_minutes = parse_hhmm(args.anchor)
+        if args.hours:
+            start_text, _, end_text = args.hours.partition("-")
+            if not end_text:
+                raise ValueError(f"expected HH:MM-HH:MM, got {args.hours!r}")
+            anchor_minutes = anchor_for_working_hours(parse_hhmm(start_text), parse_hhmm(end_text))
+        else:
+            anchor_minutes = parse_hhmm(args.anchor)
     except ValueError as e:
         print(json.dumps({"error": "invalid_anchor", "detail": str(e)}))
         sys.exit(1)
