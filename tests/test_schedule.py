@@ -2,6 +2,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
 from window_optimizer.schedule import (
@@ -204,9 +206,17 @@ def test_balanced_anchor_never_hides_usage_in_uncovered_gaps():
     degenerate optimum is unrepresentable."""
     ts = _prompts([(d, [(22, 0), (22, 30), (23, 0), (23, 30), (0, 30)]) for d in range(1, 21)])
     anchor = compute_balanced_anchor(ts, NOW)
-    loads = segment_loads(usage_histogram(ts, NOW), anchor)
+    counts = usage_histogram(ts, NOW)
+    loads = segment_loads(counts, anchor)
     assert sum(loads) == 100
-    assert max(loads) > 0  # someone's budget must own this work
+    # `max(loads) > 0` cannot fail — segments partition the day, so any non-empty
+    # histogram always lands somewhere. Assert the thing that actually distinguishes
+    # this objective from the rejected gap-based one: most of the usage must sit
+    # inside a *covered* window, not in the uncovered tail of a segment.
+    covered = 0
+    for i, start in enumerate(slot_minutes_from_anchor(anchor)):
+        covered += sum(counts[(start + k) % 1440] for k in range(WINDOW_MINUTES))
+    assert covered >= 0.75 * sum(loads), f"only {covered}/{sum(loads)} prompts fall inside an open window"
 
 
 def test_balanced_anchor_is_robust_to_stray_early_prompts():
@@ -235,3 +245,38 @@ def test_balanced_anchor_beats_or_matches_every_other_phase_on_peak_load():
     best_peak = max(segment_loads(counts, best))
     for phi in range(0, 1440, 7):
         assert max(segment_loads(counts, phi)) >= best_peak
+
+
+# ---- The brute-force ADR-0007 cites (previously run ad hoc and never committed) ----
+
+BRUTE_FORCE_PROFILES = {
+    "heavy morning block": [(9, 0), (9, 30), (10, 0), (10, 30), (11, 0), (11, 30), (12, 0), (12, 30)],
+    "two sessions": [(9, 0), (9, 30), (10, 0), (20, 0), (20, 30), (21, 0)],
+    "night owl": [(22, 0), (22, 30), (23, 0), (23, 30), (0, 30)],
+    "flat working day": [(h, 0) for h in range(8, 21)],
+    "lumpy bursts": [(7, 0), (7, 5), (7, 10), (13, 0), (13, 5), (18, 0), (23, 0)],
+    "dense office hours": [(h, m) for h in range(9, 17) for m in (0, 20, 40)],
+    "single daily check": [(9, 0)],
+}
+
+
+@pytest.mark.parametrize("name,pattern", sorted(BRUTE_FORCE_PROFILES.items()))
+def test_returned_anchor_is_optimal_over_all_1440_phases(name, pattern):
+    """ADR-0007 claimed this was 'brute-forced against all 1440 phases across seven usage
+    profiles'. That run happened, but only in a throwaway script that was never committed —
+    the same failure as the stability table it sat next to. Committed here so the claim is
+    checkable, and so it fails if the optimiser ever stops returning a true optimum."""
+    ts = _prompts([(d, pattern) for d in range(1, 21)])
+    counts = usage_histogram(ts, NOW)
+    chosen = compute_balanced_anchor(ts, NOW)
+    chosen_peak = max(segment_loads(counts, chosen))
+    true_best = min(max(segment_loads(counts, phi)) for phi in range(1440))
+    assert chosen_peak == true_best, f"{name}: returned peak {chosen_peak}, optimum is {true_best}"
+
+
+@pytest.mark.parametrize("name,pattern", sorted(BRUTE_FORCE_PROFILES.items()))
+def test_every_prompt_is_owned_at_every_phase(name, pattern):
+    ts = _prompts([(d, pattern) for d in range(1, 21)])
+    counts = usage_histogram(ts, NOW)
+    for phi in (0, 1, 137, 313, 929, 1439):
+        assert sum(segment_loads(counts, phi)) == sum(counts), f"{name}: phase {phi} loses prompts"

@@ -25,12 +25,12 @@ Three separate defects, in increasing order of importance:
 
 - Build a per-minute histogram of **every** logged prompt over the trailing 28 days (`usage_histogram`).
 - The four resets partition the 24h circle into segments of 310/310/310/**510** minutes. Each segment is the work riding on that reset's budget.
-- Score every one of the 1440 candidate phases by `(peak segment load, load on the 510-minute segment)` and take the minimum. Prefix sums make this ~5.7k operations, not a search.
+- Score every one of the 1440 candidate phases by `(peak segment load, load on the 510-minute segment)` and take the minimum. Prefix sums make this ~5.7k operations, not a search. Optimality is verified by brute force over all 1440 phases across seven profiles in `test_returned_anchor_is_optimal_over_all_1440_phases` — originally run ad hoc and *not committed*, which an outside reviewer correctly caught as the same uncommitted-evidence failure as the stability table sitting beside it.
 - Ties are common with sparse data; take the centre of the widest tied band so the schedule sits on a plateau rather than on an edge that one new prompt would flip.
 
 Minimising the peak is the right objective under uncertainty about the actual token budget: it maximises the threshold at which *any* window would start blocking you. And it produces the behaviour the Operator described — for a heavy 09:00–13:00 block, it places a reset at ~10:46, splitting 160 prompts into 80/80 instead of leaving all 160 on one budget.
 
-Measured against the old estimator on the same data: the three stray pings that moved the old anchor 71 minutes move this one by **0**.
+Measured against the old estimator on the same data: the three stray pings that moved the old anchor 71 minutes move this one by **0**. (That 71-minute figure is no longer reproducible — the old estimator is deleted — so treat it as a recorded observation from the time, not a claim you can re-run. The 0-minute drift is still checkable: `test_balanced_anchor_is_robust_to_stray_early_prompts`.)
 
 ## Alternatives considered
 
