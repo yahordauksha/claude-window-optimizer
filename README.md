@@ -4,13 +4,14 @@
 
 Your usage allowance resets every 5 hours. A plugin that schedules those resets around when you actually work, so a heavy stretch doesn't drain one window and leave you idle for the rest of it.
 
-```
-/plugin marketplace add yahordauksha/claude-window-optimizer
-/plugin install claude-window-optimizer@claude-window-optimizer
-/setup-window-optimizer
+```bash
+claude plugin marketplace add yahordauksha/claude-window-optimizer
+claude plugin install claude-window-optimizer@claude-window-optimizer
 ```
 
-One question, one confirmation, done. Works in the CLI and the Desktop app.
+Then run `/setup-window-optimizer` — one question, one confirmation, done.
+
+Works in the CLI **and** the Desktop app: those two commands install at user scope, which both share.
 
 ---
 
@@ -130,16 +131,27 @@ Things I'd want to know before installing someone else's plugin. All of these ar
 
 ## Install
 
-### CLI or Desktop
+### Everyone: two commands in a terminal
 
-Same two steps in both — `/plugin` in the CLI, the plugin browser in Desktop:
+Run these in a **normal terminal** — you don't need to start Claude Code first:
 
+```bash
+claude plugin marketplace add yahordauksha/claude-window-optimizer
+claude plugin install claude-window-optimizer@claude-window-optimizer
 ```
-/plugin marketplace add yahordauksha/claude-window-optimizer
-/plugin install claude-window-optimizer@claude-window-optimizer
-```
 
-Then run `/setup-window-optimizer` once.
+They install at **user scope**, so the plugin is available everywhere: every CLI session, and the Desktop app's Code tab.
+
+Then run `/setup-window-optimizer` once — it asks what hours you work, shows the full proposed schedule, and waits for your confirmation before creating anything.
+
+### If you're on Desktop
+
+Restart the app after installing, and you'll find the plugin under the **+** button next to the prompt box → **Plugins**.
+
+Two things that trip people up here, both worth knowing:
+
+- **`/plugin` doesn't work in Desktop.** It's a CLI-only slash command; Desktop has a plugin manager UI instead. Typing `/plugin marketplace add ...` into the Desktop app gets you *"`/plugin` isn't available in this environment"* — accurate, but not helpful.
+- **Desktop's plugin browser only lists marketplaces you've already added.** This plugin lives in its own marketplace rather than Anthropic's official one, so it won't show up there until you've run the `marketplace add` command above once. That's the only reason a terminal is involved at all.
 
 ### Just trying it out
 
@@ -149,7 +161,16 @@ cd claude-window-optimizer
 claude --plugin-dir "$(pwd)"
 ```
 
-Loads for that session only. Nothing persists, nothing to uninstall.
+Loads for that one CLI session only — nothing persists, nothing to uninstall. (CLI only; `--plugin-dir` is a command-line flag.)
+
+### Uninstalling
+
+```bash
+claude plugin uninstall claude-window-optimizer@claude-window-optimizer
+claude plugin marketplace remove claude-window-optimizer
+```
+
+Your four routines aren't removed by this — delete those at [claude.ai/code/routines](https://claude.ai/code/routines).
 
 ---
 
