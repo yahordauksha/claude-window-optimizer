@@ -2,6 +2,9 @@
 
 Narrows ADR-0003. Auto-detection stays; what it's allowed to select does not.
 
+> [!note] Superseded
+> [ADR-0010](0010-fixed-safe-prompt-pool.md) removed repo auto-detection entirely — the resets now send fixed, self-contained prompts and fetch nothing, so there is no repo to select and no untrusted text to guard. This ADR's own conclusion turned out to be wrong: a second reviewer showed the ownership check did *not* remove the arbitrary-internet-text path, because the fetch requires a **public** repo and anyone can open an issue on a public repo you own. Kept for that reasoning, not as live guidance.
+
 ## Context
 
 An independent review found this, and it's the finding I'd most want back.

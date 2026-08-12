@@ -296,8 +296,8 @@ def logged_days_in_window(timestamps, now, trailing_days=DEFAULT_TRAILING_DAYS):
     """Count of distinct calendar days with at least one logged prompt in the trailing window.
 
     Feeds /tune-pings' required output line ("Based on N days logged, last
-    4 weeks") — shares the same cutoff and per-day reduction as
-    compute_weighted_anchor so the two numbers stay consistent with each other.
+    4 weeks") — shares the same trailing-window cutoff as the anchor
+    computation so the two numbers stay consistent with each other.
     """
     cutoff = now - timedelta(days=trailing_days)
     recent = [ts for ts in timestamps if ts >= cutoff]

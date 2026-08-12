@@ -2,8 +2,8 @@
 
 Resolves [#7](https://github.com/yahordauksha/claude-window-optimizer/issues/7).
 
-> [!note] Partially superseded
-> [ADR-0003](0003-auto-detect-instead-of-asking.md) replaces this ADR's "ask the user which repo, never guess" stance with auto-detection — direct Operator feedback after seeing the question in practice. Everything else here (the kind set, WebFetch-only, `/tune-pings` never touching content) still stands.
+> [!note] Superseded
+> [ADR-0003](0003-auto-detect-instead-of-asking.md) replaced this ADR's "ask the user which repo, never guess" stance with auto-detection. [ADR-0010](0010-fixed-safe-prompt-pool.md) then removed the whole idea: resets now send fixed, self-contained prompts and fetch nothing, so there are no content "kinds", no `WebFetch` grant, and no repo. Kept for the reasoning trail — the useful part is how a reasonable-looking personalisation feature turned into the plugin's only real attack surface.
 
 ## Context
 

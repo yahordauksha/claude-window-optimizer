@@ -1,6 +1,9 @@
 # ADR-0003: Auto-detect the ping repo instead of asking
 
-Supersedes part of [ADR-0002](0002-useful-ping-content.md) — not the whole thing, just its "never guess a repo the user didn't name" stance. ADR-0002's other decisions (kind set, WebFetch-only, `/tune-pings` never touches content) stand unchanged.
+Supersedes part of [ADR-0002](0002-useful-ping-content.md) — its "never guess a repo the user didn't name" stance.
+
+> [!note] Superseded
+> [ADR-0008](0008-only-auto-detect-repos-you-own.md) narrowed this to repos you own, then [ADR-0010](0010-fixed-safe-prompt-pool.md) removed repo detection altogether. Worth reading as a cautionary trail: ADR-0002 had the trust boundary right, this ADR relaxed it for a real UX win without anyone noticing it also widened what the plugin trusts, and two review rounds were needed to walk it back.
 
 ## Context
 
