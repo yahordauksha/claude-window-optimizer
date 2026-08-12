@@ -1,5 +1,5 @@
 ---
-description: One-time setup — asks once when you want your usage window to reset each day, then schedules 4 daily resets. Auto-detects a repo so each scheduled message reports real open issues instead of being a no-op (no extra question asked).
+description: One-time setup — asks once what hours you work, then schedules 4 daily usage-window resets around them.
 allowed-tools: Bash(python3 *:*), Bash(cat *:*), ToolSearch, RemoteTrigger, Skill, AskUserQuestion
 ---
 
@@ -23,11 +23,11 @@ If it exists with 4 entries under `routines`: print the current reset times in o
 
 **Ask about the user's day, not about reset times.** Asking "what time do you want your window to reset" sounds like the right question and produces a measurably bad schedule: used directly as the anchor, it puts one reset at the head of a work block and leaves the whole block riding on a single budget. For a concentrated evening worker that delivered *zero* benefit over not installing the plugin at all. Working hours let the same objective `/tune-pings` uses pick the anchor — which lands a reset partway through the block instead. See `adr/0009-ask-for-working-hours.md`.
 
-**First compute the real schedule for each option you're about to offer.** Pick three plausible working days (09:00–17:00 / 08:00–18:00 / 20:00–01:00 unless context suggests otherwise) and run the script once per candidate:
+**First compute the real schedule for each option you're about to offer.** Pick three plausible working days that produce *distinct* schedules (09:00–17:00 / 10:00–19:00 / 20:00–01:00 is a good default spread — note 08:00–18:00 optimises to the same phase as 09:00–17:00, so don't offer both) and run the script once per candidate:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --hours 09:00-17:00
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --hours 08:00-18:00
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --hours 10:00-19:00
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --hours 20:00-01:00
 ```
 
@@ -35,15 +35,19 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --hours 20:00-01:00
 
 **Then ask, with each option showing the times it actually produces.** Use `AskUserQuestion`:
 
-> **What hours do you usually work?**
+> **What hours do you usually work? Rough is fine — this is only a starting point. Once you've built up a week or two of real usage, `/tune-pings` recalculates the schedule from when you actually work.**
 >
 > | option | description |
 > |---|---|
 > | `09:00–17:00` | Window resets at 07:50, 13:00, 18:10, 23:20 |
-> | `08:00–18:00` | Window resets at 07:50, 13:00, 18:10, 23:20 |
+> | `10:00–19:00` | Window resets at 09:20, 14:30, 19:40, 00:50 |
 > | `20:00–01:00` | Window resets at 17:20, 22:30, 03:40, 08:50 |
 
+**Say that it's provisional in the question itself**, not afterwards. Without it the user thinks they're making a decision they have to get right, when the real answer is "guess, and it self-corrects." It also explains why they're being asked at all rather than having it measured — there's nothing to measure yet.
+
 Fill each description from that candidate's own `slots[].local_hhmm`, joined with commas — never write the times by hand, and never reuse the illustrative ones above.
+
+**Make sure the options actually differ.** Two nearby ranges can optimise to the same phase and produce identical reset times, which reads as broken — the user sees two different answers to "what hours do you work" giving one schedule and reasonably concludes the input is ignored. If two candidates come back identical, swap one for a range far enough away to differ (e.g. replace `08:00–18:00` with `10:00–19:00` or `06:00–14:00`) before asking. Check this against the computed output, not by eye.
 
 **Never describe an option as "and 3 more times through the day"** or anything else that restates the question instead of answering it. The times themselves are the description.
 
@@ -63,7 +67,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_ping_prompt.py" --count 4
 
 Returns `{"allowed_tools": ["TodoWrite"], "prompts": [{"key","title","prompt"}, ...]}` — four distinct prompts drawn from a fixed, inspectable pool in `lib/window_optimizer/ping_content.py`. Assign them to slots in order.
 
-Every prompt is self-contained: none fetches anything, none reads anything, none needs a tool. That's deliberate and load-bearing — see `adr/0010-fixed-safe-prompt-pool.md`. Never substitute your own text, never add a prompt that references external data, and never grant a tool because a prompt "might need one." The grant is `[]`, from tested code.
+Every prompt is self-contained: none fetches anything, none reads anything, none needs a tool. That's deliberate and load-bearing — see `adr/0010-fixed-safe-prompt-pool.md`. Never substitute your own text, never add a prompt that references external data, and never grant a tool because a prompt "might need one." The grant comes from tested code — and note it is `["TodoWrite"]`, not `[]`: an empty list is read as *unset* and replaced with the account's full default tool set (`adr/0011-empty-allowed-tools-means-everything.md`).
 
 ## STEP 3 — Resolve the environment (print nothing)
 
@@ -79,14 +83,14 @@ Note whether any pre-existing routine looks like an old ad-hoc keep-alive (e.g. 
 **Print exactly this shape and nothing more:**
 
 ```
-Your window will reset daily at 08:00, 13:10, 18:20, 23:30 (local).
-4 routines in your Cloud Routines list, each checks <owner/name>'s open
-issues when it fires. Nothing else is granted.
+Your window will reset daily at 07:50, 13:00, 18:10, 23:20 (local).
+4 routines in your Cloud Routines list. Each sends one short message:
+Water, Stretch, Mood, Check-in. Nothing fetched, no tools used.
 
 Create them?
 ```
 
-If no repo was detected, the second line is `4 routines in your Cloud Routines list, each sends a short keep-alive message.` Do not add a cron table, a per-slot breakdown, a model name, or a tool-grant list — if the user wants those, they'll ask.
+Name the four prompt titles from STEP 2b. Do not add a cron table, a per-slot breakdown, a model name, or a tool-grant list — if the user wants those, they'll ask.
 
 **Wait for explicit confirmation.** Creating routines is never a silent apply.
 
