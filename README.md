@@ -15,8 +15,6 @@ claude plugin install claude-window-optimizer@claude-window-optimizer
 /setup-window-optimizer
 ```
 
-One question, one confirmation, done.
-
 ---
 
 ## The problem
@@ -26,7 +24,7 @@ Your allowance is **per 5-hour window**. Go hard and you can burn a whole window
 ```
 09:00   start working, going hard
 10:15   ✗ allowance gone
-          └── nothing until 14:00. four hours of thumbs.
+          └── nothing until 14:00. four hours of wait.
 14:00   window finally resets
 ```
 
@@ -82,8 +80,6 @@ Water, Stretch, Mood, Check-in. No tools, nothing fetched.
 Create them?
 ```
 
-Nothing is created until you say yes. That's the whole setup.
-
 ---
 
 ## How it works
@@ -122,8 +118,6 @@ You'll get a nudge to run it after 7 days. It refuses to act on thin data rather
 ---
 
 ## Honest limitations
-
-Things I'd want to know before installing someone else's plugin. All of these are covered in more depth in [`adr/`](adr/).
 
 **It counts prompts, not tokens.** Hooks don't expose token counts, so a one-word question weighs the same as a 50-file refactor. Prompt volume is a proxy — it's the only signal I can actually get at.
 
@@ -207,12 +201,6 @@ Plus two hooks that need no setup: one logs prompt timestamps, one reminds you t
 | **Never touches** | Your prompt content, your tokens, anything else |
 
 ---
-
-## For the curious
-
-The design decisions live in [`adr/`](adr/) — ten of them, including the ones I got wrong and had to reverse. The scheduling math is in [`lib/window_optimizer/schedule.py`](lib/window_optimizer/schedule.py), and `python3 tools/measure_anchor_stability.py` reproduces the measurement behind its data-sufficiency guard.
-
-I put this through two rounds of adversarial review by independent agents, told explicitly not to trust the repo's own documentation. Both found real bugs. Several fixes in the history exist because a reviewer proved one of my claims wrong — including the time I'd published a measurement that turned out not to reproduce. One reviewer's own most confident finding was itself wrong and they retracted it, which is in there too. Anything still open is tracked, not quietly dropped.
 
 ## License
 
