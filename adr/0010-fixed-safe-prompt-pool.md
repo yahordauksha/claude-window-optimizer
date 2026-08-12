@@ -30,7 +30,9 @@ The whole repo-detection path is **deleted**, not disabled: `scripts/detect_repo
 
 `routines.json` now records `prompt_key` and `title` per slot instead of `kind`/`repo`. `/tune-pings` passes them through untouched, exactly as it did before: it re-times resets, never rewrites what they say.
 
-The routine name now carries the prompt's title — `Window reset 2/4 — Stretch (13:10 local)`. It keeps the `Window reset n/4` prefix on purpose: these appear in a list the user can't delete via API, so they must stay identifiable as this plugin's, not just as four mystery agents talking about posture.
+**The routine name is just the prompt's title** — `Stretch`, `Water`, `Mood`, `Check-in`.
+
+An earlier revision used `Window reset 2/4 — Stretch (13:10 local)`, reasoning that routines live in a list with no API delete and so must stay identifiable as this plugin's. The Operator overruled it, and on reflection the prefix was solving a problem that mostly isn't there: the schedule and its `trigger_id`s are recorded in `routines.json`, so the plugin never needs the name to find them, and a user with exactly four routines called Stretch/Water/Mood/Check-in is not going to mistake them for something else. The cost of being wrong is a small one — someone cleaning up by hand months later has to match four names against this pool — against a real cost in every-day list clutter.
 
 ## Alternatives considered
 
