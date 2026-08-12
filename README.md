@@ -1,47 +1,136 @@
 # Claude Window Optimizer
 
-A Claude Code plugin that makes your 5-hour usage window reset on *your* schedule instead of whenever you happened to send your first message.
+**Stop wasting your Claude Code usage window on a 7am "quick question."**
 
-## Problem
+A plugin that resets your 5-hour usage window on *your* schedule, so it's full when you sit down to work — not half-spent because you asked something trivial before breakfast.
 
-Claude Code's usage limit runs on a 5-hour window that starts with your first message — so if you fire off one question at 7am, your window is already half-spent by the time you actually sit down. You can reset it earlier by sending a message once the previous window has expired, but that only works if it lands *after* expiry: a message sent while a window is still open is a no-op. That means the spacing floor for a reset schedule is strictly more than 5 hours (target: 5h05m–5h15m), starting from the time you actually want your day's first fresh window.
+```
+/plugin marketplace add yahordauksha/claude-window-optimizer
+/plugin install claude-window-optimizer@claude-window-optimizer
+/setup-window-optimizer
+```
 
-### Where that claim comes from
+One question, one confirmation, done. Works in the CLI and the Desktop app.
 
-Anthropic documents that the window exists and resets on a schedule — including the in-product message `You've hit your session limit · resets 3:45pm`. A single named reset time implies a fixed window boundary rather than a continuously sliding one.
+---
 
-What Anthropic does **not** document is the part this plugin depends on: that a scheduled message opens a fresh window. That comes from operational use. Before this plugin existed, its author ran two hand-made Cloud Routines — "Start session at 7:30" and "Start session at 13:00", each sending a one-word message — for weeks, and observed windows starting at those ping times rather than at the first real message of the day. The annoyance that motivated building this at all (a 7am ping opening a window that then expires mid-workday) *is* that mechanic working, just badly timed.
+## The problem
 
-This is recorded here because it's the load-bearing assumption under everything else, and it previously lived only in the author's head — an outside reviewer correctly flagged the README for asserting it with no basis. If you're evaluating this plugin, satisfy yourself about this claim first. It's directly checkable in about five hours: send one message, note the reset time, send another after the window expires, and check whether the new reset time tracks the second message.
+Claude Code gives you a usage allowance on a 5-hour window. That window **starts with your first message** — whatever it happens to be.
 
-## What this plugin does (v1)
+So this happens:
 
-1. **`/setup-window-optimizer`** (run once) — asks one question: what time you want your window to reset each day. From that it schedules 4 daily resets, 5h10m apart, so your window is fresh when you sit down and never expires mid-afternoon (see `adr/0001-cloud-routine-scheduling-constraints.md` for why 4 and why that spacing). It asks rather than guessing from your log on purpose — on a first run the log is just the last few minutes of installing the plugin, so a "computed" answer there is noise dressed up as a pattern (`adr/0004-setup-always-asks-for-the-anchor.md`). Your answer doesn't need to be precise; `/tune-pings` corrects it from real data later.
-2. **The scheduled messages do something real, not just a no-op** — the resets work by sending a small message on a schedule; setup auto-detects a public GitHub repo **that you own** (your current project's git remote, or your most recently active public repo) with no question asked — it will not wire your scheduled agents to someone else's issue tracker just because that's the directory you happened to be standing in (`adr/0008-only-auto-detect-repos-you-own.md`), and if one's found, each message reports that repo's most recently updated open issues instead of just saying "hello." Still one cheap `WebFetch` call on the `haiku` model, not "real work." See `adr/0002-useful-ping-content.md` for what's supported today and what isn't yet (email/calendar checks aren't built — disclosed, not silently skipped), and `adr/0003-auto-detect-instead-of-asking.md` for why this is inferred rather than asked.
-3. **Logging** — a bundled `UserPromptSubmit` hook timestamps every prompt to a local log (`~/.claude/window-optimizer/prompts.log`), no setup required. Timestamps only — never prompt content.
-4. **`/tune-pings`** (run weekly) — this is where log data actually gets used: recomputes your reset times from the trailing ~4 weeks of *all* logged activity, picking the schedule that spreads your real usage most evenly across the four windows so no single window runs dry first (`adr/0007-balance-window-load-not-start-of-day.md`), correcting whatever you guessed at setup. Declines to re-anchor on fewer than 3 logged days or 200 logged prompts rather than swinging your schedule on noise — the volume floor is measured, reproduce it with `python3 tools/measure_anchor_stability.py`. Only changes *when* the resets happen, never what the scheduled message does.
-5. **Reminder** — a bundled `SessionStart` hook nudges you to run `/tune-pings` if it's been 7+ days since the last tune-up (or since setup, if you've never run one), rate-limited to once a day.
+```
+07:12   "hey, quick one — what's the syntax for X?"
+        └── your 5-hour window quietly starts here
+09:00   you actually sit down to work
+11:30   you're deep in something good
+12:12   ✗ window expires. you're out, mid-thought.
+```
 
-See `adr/` for the design decisions this was built against, and the closed issues in the tracker for how each piece was scoped.
+You spent your window on a one-liner and a shower. The rest of your day gets shaped by a question you don't even remember asking.
 
-## How to install
+The usual workaround is one scheduled ping in the morning. That's what this plugin's author ran for weeks — and it's exactly what made him build this, because a single 7am ping just relocates the problem to noon.
 
-### CLI or Desktop (persistent — recommended)
+## The fix
 
-Works the same way in both: `/plugin` in the CLI and the plugin browser in the Desktop app are two UIs over the same underlying mechanism. Run this once, in either surface:
+Four scheduled resets a day, spaced so a fresh window is always close by:
+
+```
+08:00   ● reset   ── window is full when you start
+13:10   ● reset   ── full again for the afternoon
+18:20   ● reset
+23:30   ● reset
+```
+
+The boundaries land where you chose them, instead of wherever your first message fell. And when you do burn through a window, the next one is minutes away instead of hours.
+
+## What setup actually looks like
+
+It asks one question, and shows you exactly what each answer produces:
+
+```
+What time do you want your usage window to reset each day?
+
+  1. 07:00     Resets at 07:00, 12:10, 17:20, 22:30
+  2. 08:00     Resets at 08:00, 13:10, 18:20, 23:30
+  3. 09:00     Resets at 09:00, 14:10, 19:20, 00:30
+  4. Something else
+```
+
+Then it shows the full plan and waits:
+
+```
+Your window will reset daily at 08:00, 13:10, 18:20, 23:30 (local).
+4 routines in your Cloud Routines list, each checks your repo's open
+issues when it fires. Nothing else is granted.
+
+Create them?
+```
+
+Nothing is created until you say yes. That's the whole setup.
+
+---
+
+## How it works
+
+### Why 5h10m, and not 5 hours
+
+A scheduled message only opens a new window if the previous one has **already expired**. Send it a minute early and it lands inside a still-open window and does nothing at all.
+
+So the gap between resets has to be *strictly more than* five hours. 5h10m gives a small margin without wasting the difference. Four of them tile a day with every gap clearing that floor — including the long overnight one.
+
+### Why four, and why they never change
+
+Four fits a day. They're created once and then only ever **retimed** — never added or removed — because the Routines API has no delete. A design that added and dropped routines would leave orphans for you to clean up by hand.
+
+### The weekly tune-up
+
+The plugin ships a hook that notes **when** you send prompts. Timestamps only — never content, never tokens. After a few weeks that's a picture of your real working rhythm.
+
+Run `/tune-pings` and it shifts your four resets to whatever spreads your actual usage most evenly across the four windows:
+
+```
+Window resets: 05:36, 10:46, 15:56, 00:26  (was 08:00, 13:10, 18:20, 23:30)
+Based on 23 days / 412 prompts, last 28 days
+```
+
+The goal isn't to match when you start work — it's to stop any single window carrying a disproportionate share of your day. If your heavy block is 9am–1pm, you actually *want* a reset landing at 10:46, splitting that work across two budgets instead of leaving it all on one.
+
+You'll get a nudge to run it after 7 days. It refuses to act on thin data rather than shuffling your schedule around noise.
+
+---
+
+## Honest limitations
+
+Worth knowing before you install. All of these are covered in more depth in [`adr/`](adr/).
+
+**The core mechanic isn't documented by Anthropic.** That a scheduled message opens a fresh window comes from operational use — two hand-made routines run for weeks, windows observed starting at the ping times — not from any official source. You can check it yourself in about five hours: send a message, note the reset time, send another once the window expires, see whether the reset time follows. Everything here rests on this.
+
+**It counts prompts, not tokens.** Hooks don't expose token counts, so a one-word question weighs the same as a 50-file refactor. Prompt volume is a proxy, and it's the only one available.
+
+**It won't help everyone equally.** The benefit comes from opening windows during idle time. Work fifteen hours straight and you already chain fresh windows naturally — this does very little for you. Concentrated blocks with gaps between them benefit most.
+
+**The weekly cap still exists.** Session and weekly allowances are consumed at the same time. This plugin does nothing about the weekly one.
+
+**Routines can't be deleted through the API.** Setup creates four; removing them is a manual step at [claude.ai/code/routines](https://claude.ai/code/routines). That's the real cost of installing.
+
+---
+
+## Install
+
+### CLI or Desktop
+
+Same two steps in both — `/plugin` in the CLI, the plugin browser in Desktop:
 
 ```
 /plugin marketplace add yahordauksha/claude-window-optimizer
 /plugin install claude-window-optimizer@claude-window-optimizer
 ```
 
-(Desktop users: same two steps, just through the plugin browser's UI instead of typing the commands — see [the Desktop docs](https://code.claude.com/docs/en/desktop#install-plugins).)
+Then run `/setup-window-optimizer` once.
 
-This is a real, verified install — the plugin registers persistently (`enabledPlugins` in your Claude Code settings) and `/setup-window-optimizer`/`/tune-pings` become available in every future session, no flag needed. Confirmed by actually running the install, checking `claude plugin list`, and opening a completely fresh session with no special flags to see both commands show up.
-
-Once installed, run `/setup-window-optimizer` once — it'll ask what time you want your window to reset, show you the full proposed schedule, and wait for your confirmation before creating anything.
-
-### CLI only, session-local (for trying it out without installing)
+### Just trying it out
 
 ```bash
 git clone https://github.com/yahordauksha/claude-window-optimizer.git
@@ -49,15 +138,35 @@ cd claude-window-optimizer
 claude --plugin-dir "$(pwd)"
 ```
 
-Loads the plugin for that one session only — nothing persists, nothing to uninstall afterward. Useful for testing a local change to this repo itself; not what you want for actual day-to-day use (the hooks won't be there in your next normal session).
+Loads for that session only. Nothing persists, nothing to uninstall.
 
-## Status
+---
 
-v1 built: both hooks, both commands, and the underlying schedule/state library are implemented and tested (`pytest` + `ruff` clean). Install the plugin and run `/setup-window-optimizer` once to get started.
+## Commands
 
-## Optional: Desktop local scheduled task
+| Command | When | What it does |
+|---|---|---|
+| `/setup-window-optimizer` | Once | Asks your reset time, creates the four routines |
+| `/tune-pings` | Weekly | Retimes them from your actual usage |
 
-For Desktop app users, `/tune-pings` can also be run on a local weekly timer (Desktop's "Local" Routine type, distinct from the Cloud Routine `/setup-window-optimizer` creates) instead of waiting for the reminder hook. This is a manual, one-time toggle in the Routines panel — no CLI/scriptable path exists for it, so the plugin can't set it up on your behalf.
+Plus two hooks that need no setup: one logs prompt timestamps, one reminds you to tune up after a week.
+
+## What it touches
+
+| | |
+|---|---|
+| **Writes** | `~/.claude/window-optimizer/` — a timestamp log and small state files |
+| **Creates** | 4 Cloud Routines on your account |
+| **Sends** | One short message per reset, on the cheapest model |
+| **Never touches** | Your prompt content, your tokens, anything else |
+
+---
+
+## For the curious
+
+The design decisions live in [`adr/`](adr/) — eight of them, including the ones that turned out wrong and got reversed. The scheduling math is in [`lib/window_optimizer/schedule.py`](lib/window_optimizer/schedule.py), and `python3 tools/measure_anchor_stability.py` reproduces the measurement behind its data-sufficiency guard.
+
+This project has been through two rounds of adversarial review by independent agents told explicitly not to trust its own documentation. Both found real bugs, and several fixes in the history exist because a reviewer proved a claim wrong — including one round where the reviewer's own most confident finding was itself wrong, and they retracted it. Open findings are tracked rather than quietly dropped.
 
 ## License
 
