@@ -1,8 +1,8 @@
 # Claude Window Optimizer
 
-**Stop wasting your Claude Code usage window on a 7am "quick question."**
+**Hit your Claude Code limit at 10am, wait until 2pm. This spreads your day across four allowances instead of one.**
 
-A plugin that resets your 5-hour usage window on *your* schedule, so it's full when you sit down to work — not half-spent because you asked something trivial before breakfast.
+Your usage allowance resets every 5 hours. A plugin that schedules those resets around when you actually work, so a heavy stretch doesn't drain one window and leave you idle for the rest of it.
 
 ```
 /plugin marketplace add yahordauksha/claude-window-optimizer
@@ -16,34 +16,35 @@ One question, one confirmation, done. Works in the CLI and the Desktop app.
 
 ## The problem
 
-Claude Code gives you a usage allowance on a 5-hour window. That window **starts with your first message** — whatever it happens to be.
-
-So this happens:
+Your allowance is **per 5-hour window**. Go hard and you can burn a whole window's worth in an hour — and then you're locked out for the remaining four.
 
 ```
-07:12   "hey, quick one — what's the syntax for X?"
-        └── your 5-hour window quietly starts here
-09:00   you actually sit down to work
-11:30   you're deep in something good
-12:12   ✗ window expires. you're out, mid-thought.
+09:00   start working, going hard
+10:15   ✗ allowance gone
+          └── nothing until 14:00. four hours of thumbs.
+14:00   window finally resets
 ```
 
-You spent your window on a one-liner and a shower. The rest of your day gets shaped by a question you don't even remember asking.
+Four hours of dead time, sitting on a subscription you're paying for.
 
-The usual workaround is one scheduled ping in the morning. That's what this plugin's author ran for weeks — and it's exactly what made him build this, because a single 7am ping just relocates the problem to noon.
+And it's worse than it looks, because you don't get to choose when that lockout lands. The window started with your **first message of the day** — whatever it was. Ask one throwaway question at 07:12 and your four-hour wall arrives at 11:15 instead of 14:15, right in the middle of the afternoon.
+
+The usual workaround is a single scheduled ping in the morning. That's what this plugin's author ran for weeks, and it's exactly what made him build this — one ping just moves the wall, it doesn't remove it.
 
 ## The fix
 
-Four scheduled resets a day, spaced so a fresh window is always close by:
+Four resets a day, so your work is spread across **four separate allowances** instead of piling onto whichever one you happened to open:
 
 ```
-08:00   ● reset   ── window is full when you start
-13:10   ● reset   ── full again for the afternoon
-18:20   ● reset
-23:30   ● reset
+07:50   ● reset
+13:00   ● reset   ── lands mid-afternoon, on purpose
+18:10   ● reset
+23:20   ● reset
 ```
 
-The boundaries land where you chose them, instead of wherever your first message fell. And when you do burn through a window, the next one is minutes away instead of hours.
+Any one stretch of heavy work is far less likely to drain a window. And when you do hit the wall, the next reset is minutes away rather than hours.
+
+That mid-block reset at 13:00 isn't an accident — see [how the timing is chosen](#the-weekly-tune-up).
 
 ## What setup actually looks like
 
@@ -106,7 +107,7 @@ Window resets: 05:36, 10:46, 15:56, 00:26  (was 08:00, 13:10, 18:20, 23:30)
 Based on 23 days / 412 prompts, last 28 days
 ```
 
-The goal isn't to match when you start work — it's to stop any single window carrying a disproportionate share of your day. If your heavy block is 9am–1pm, you actually *want* a reset landing at 10:46, splitting that work across two budgets instead of leaving it all on one.
+The goal isn't to match when you start work — it's to stop any single window carrying enough of your day to run dry. If your heavy block is 9am–1pm, you actually *want* a reset landing at 10:46: that splits four hours of hard work across two allowances instead of betting the whole block on one.
 
 You'll get a nudge to run it after 7 days. It refuses to act on thin data rather than shuffling your schedule around noise.
 
@@ -115,8 +116,6 @@ You'll get a nudge to run it after 7 days. It refuses to act on thin data rather
 ## Honest limitations
 
 Worth knowing before you install. All of these are covered in more depth in [`adr/`](adr/).
-
-**The core mechanic isn't documented by Anthropic.** That a scheduled message opens a fresh window comes from operational use — two hand-made routines run for weeks, windows observed starting at the ping times — not from any official source. You can check it yourself in about five hours: send a message, note the reset time, send another once the window expires, see whether the reset time follows. Everything here rests on this.
 
 **It counts prompts, not tokens.** Hooks don't expose token counts, so a one-word question weighs the same as a 50-file refactor. Prompt volume is a proxy, and it's the only one available.
 
@@ -157,7 +156,7 @@ Loads for that session only. Nothing persists, nothing to uninstall.
 
 | Command | When | What it does |
 |---|---|---|
-| `/setup-window-optimizer` | Once | Asks your reset time, creates the four routines |
+| `/setup-window-optimizer` | Once | Asks what hours you work, creates the four routines |
 | `/tune-pings` | Weekly | Retimes them from your actual usage |
 
 Plus two hooks that need no setup: one logs prompt timestamps, one reminds you to tune up after a week.
