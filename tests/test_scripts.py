@@ -202,7 +202,7 @@ def test_build_ping_prompt_picks_distinct_prompts(tmp_path):
     result = _run(BUILD_PING_PROMPT, ["--count", "4", "--seed", "1"], tmp_path)
     assert result.returncode == 0
     data = json.loads(result.stdout)
-    assert data["allowed_tools"] == []
+    assert data["allowed_tools"] == ["TodoWrite"]
     assert len({p["key"] for p in data["prompts"]}) == 4
     for p in data["prompts"]:
         assert p["title"] and p["prompt"]
@@ -219,9 +219,11 @@ def test_build_ping_prompt_rejects_unknown_key(tmp_path):
     assert "error" in json.loads(result.stdout)
 
 
-def test_build_ping_prompt_never_grants_a_tool(tmp_path):
+def test_build_ping_prompt_grant_is_minimal_and_never_empty(tmp_path):
+    """Empty means "apply account defaults" to this API, i.e. full tool access."""
     for args in (["--count", "4"], ["--key", "ok"], ["--list"]):
-        assert json.loads(_run(BUILD_PING_PROMPT, args, tmp_path).stdout)["allowed_tools"] == []
+        got = json.loads(_run(BUILD_PING_PROMPT, args, tmp_path).stdout)["allowed_tools"]
+        assert got == ["TodoWrite"], got
 
 
 def test_tune_schedule_flags_cron_change_even_when_anchor_is_unchanged(tmp_path):

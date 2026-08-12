@@ -81,9 +81,19 @@ SAFE_PROMPTS = {
 }
 
 
+# No prompt in the pool needs a tool. But an *empty* allowed_tools list is read by
+# the Routines API as "unset" and replaced with the account's full default set —
+# Bash, Write, Edit, SendUserFile, REPL and the rest. Verified the hard way: a
+# routine created with [] came back granting all of them. A non-empty list is
+# honoured exactly, so the minimum expressible grant is one harmless tool rather
+# than none. TodoWrite is that tool: session-local scratch list, no filesystem, no
+# network, nothing the prompts will ever call. See adr/0011.
+MINIMAL_TOOL = "TodoWrite"
+
+
 def allowed_tools():
-    """No prompt in the pool needs a tool, so no routine is granted one."""
-    return []
+    """The narrowest grant the API will actually respect. Never [] — see MINIMAL_TOOL."""
+    return [MINIMAL_TOOL]
 
 
 def prompt_for_key(key):

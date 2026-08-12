@@ -9,7 +9,7 @@ Usage:
   build_ping_prompt.py --key water      # look up one specific prompt
   build_ping_prompt.py --list           # show the whole pool
 
-Prints JSON: {"allowed_tools": [], "prompts": [{"key","title","prompt"}, ...]}
+Prints JSON: {"allowed_tools": ["TodoWrite"], "prompts": [{"key","title","prompt"}, ...]}
 """
 
 import argparse
