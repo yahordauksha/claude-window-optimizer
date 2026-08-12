@@ -4,14 +4,20 @@
 
 Your usage allowance resets every 5 hours. A plugin that schedules those resets around when you actually work, so a heavy stretch doesn't drain one window and leave you idle for the rest of it.
 
+**1.** In a terminal:
+
 ```bash
 claude plugin marketplace add yahordauksha/claude-window-optimizer
 claude plugin install claude-window-optimizer@claude-window-optimizer
 ```
 
-Then run `/setup-window-optimizer` — one question, one confirmation, done.
+**2.** Open Claude Code — CLI or Desktop — and run:
 
-Works in the CLI **and** the Desktop app: those two commands install at user scope, which both share.
+```
+/setup-window-optimizer
+```
+
+One question, one confirmation, done.
 
 ---
 
@@ -133,18 +139,26 @@ Things I'd want to know before installing someone else's plugin. All of these ar
 
 ## Install
 
-### Everyone: two commands in a terminal
+### Everyone
 
-Run these in a **normal terminal** — you don't need to start Claude Code first:
+**Step 1 — install.** In a **normal terminal**; you don't need to start Claude Code first:
 
 ```bash
 claude plugin marketplace add yahordauksha/claude-window-optimizer
 claude plugin install claude-window-optimizer@claude-window-optimizer
 ```
 
-They install at **user scope**, so the plugin is available everywhere: every CLI session, and the Desktop app's Code tab.
+These install at **user scope**, so the plugin is available everywhere: every CLI session, and the Desktop app's Code tab.
 
-Then run `/setup-window-optimizer` once — it asks what hours you work, shows the full proposed schedule, and waits for your confirmation before creating anything.
+**Step 2 — set it up.** Open Claude Code and run:
+
+```
+/setup-window-optimizer
+```
+
+It asks what hours you work, shows you the full proposed schedule, and waits for your confirmation before creating anything.
+
+If the command isn't there, you're in a session that started before the install — open a new one, or run `/reload-plugins`.
 
 ### If you're on Desktop
 
