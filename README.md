@@ -52,10 +52,12 @@ That mid-block reset at 13:00 isn't an accident — see [how the timing is chose
 It asks one question, and shows you exactly what each answer produces:
 
 ```
-What hours do you usually work?
+What hours do you usually work? Rough is fine — this is only a starting
+point. Once you've built up a week or two of real usage, /tune-pings
+recalculates the schedule from when you actually work.
 
   1. 09:00–17:00     Window resets at 07:50, 13:00, 18:10, 23:20
-  2. 08:00–18:00     Window resets at 07:50, 13:00, 18:10, 23:20
+  2. 10:00–19:00     Window resets at 09:20, 14:30, 19:40, 00:50
   3. 20:00–01:00     Window resets at 17:20, 22:30, 03:40, 08:50
   4. Something else
 ```
