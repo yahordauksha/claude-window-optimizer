@@ -13,8 +13,13 @@ from window_optimizer.ping_content import (
 )
 
 
-def test_no_prompt_needs_a_tool():
-    assert allowed_tools() == []
+def test_grant_is_minimal_but_never_empty():
+    """[] is read by the API as "unset" and replaced with the account's full default
+    tool set — Bash, Write, Edit, SendUserFile and the rest. A routine created with []
+    came back granting all of them. Non-empty lists are honoured exactly, so the
+    narrowest expressible grant is one harmless tool. Never loosen this to []."""
+    assert allowed_tools() == ["TodoWrite"]
+    assert allowed_tools() != []
 
 
 def test_no_prompt_references_external_data():
