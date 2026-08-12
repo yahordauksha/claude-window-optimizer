@@ -19,33 +19,37 @@ cat ~/.claude/window-optimizer/routines.json 2>/dev/null
 
 If it exists with 4 entries under `routines`: print the current reset times in one line, say setup already ran, point at `/tune-pings`, stop. Don't create a second set.
 
-## STEP 2 — Ask for the reset time (always — never compute it here)
+## STEP 2 — Ask for working hours (always — never compute them here)
 
-**First compute the real schedule for each option you're about to offer.** Pick three plausible start-of-day times (07:00 / 08:00 / 09:00 unless something in context suggests otherwise) and run the script once per candidate:
+**Ask about the user's day, not about reset times.** Asking "what time do you want your window to reset" sounds like the right question and produces a measurably bad schedule: used directly as the anchor, it puts one reset at the head of a work block and leaves the whole block riding on a single budget. For a concentrated evening worker that delivered *zero* benefit over not installing the plugin at all. Working hours let the same objective `/tune-pings` uses pick the anchor — which lands a reset partway through the block instead. See `adr/0009-ask-for-working-hours.md`.
+
+**First compute the real schedule for each option you're about to offer.** Pick three plausible working days (09:00–17:00 / 08:00–18:00 / 20:00–01:00 unless context suggests otherwise) and run the script once per candidate:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --anchor 07:00
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --anchor 08:00
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --anchor 09:00
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --hours 09:00-17:00
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --hours 08:00-18:00
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compute_schedule.py" --hours 20:00-01:00
 ```
 
-(Always `${CLAUDE_PLUGIN_ROOT}`, never a bare relative `scripts/...` path — the working directory is whatever project the user has open.)
+(Always `${CLAUDE_PLUGIN_ROOT}`, never a bare relative `scripts/...` path — the working directory is whatever project the user has open. Overnight ranges like `20:00-01:00` are handled; don't split them yourself.)
 
 **Then ask, with each option showing the times it actually produces.** Use `AskUserQuestion`:
 
-> **What time do you want your usage window to reset each day?**
+> **What hours do you usually work?**
 >
 > | option | description |
 > |---|---|
-> | `07:00` | Resets at 07:00, 12:10, 17:20, 22:30 |
-> | `08:00` | Resets at 08:00, 13:10, 18:20, 23:30 |
-> | `09:00` | Resets at 09:00, 14:10, 19:20, 00:30 |
+> | `09:00–17:00` | Window resets at 07:50, 13:00, 18:10, 23:20 |
+> | `08:00–18:00` | Window resets at 07:50, 13:00, 18:10, 23:20 |
+> | `20:00–01:00` | Window resets at 17:20, 22:30, 03:40, 08:50 |
 
 Fill each description from that candidate's own `slots[].local_hhmm`, joined with commas — never write the times by hand, and never reuse the illustrative ones above.
 
-**Never describe an option as "and 3 more times through the day."** That's the thing the user is trying to find out; saying it three times under three options tells them nothing and makes the choice blind. The times themselves are the description.
+**Never describe an option as "and 3 more times through the day"** or anything else that restates the question instead of answering it. The times themselves are the description.
 
-If the user picks the free-text option, run the script once more with their answer. `{"error": "invalid_anchor"}` → ask again, don't guess a correction.
+If the user picks the free-text option, pass their hours through the same `--hours` call. `{"error": "invalid_anchor"}` → ask again, don't guess a correction. If they insist on naming an exact reset time instead of hours, `--anchor HH:MM` still exists and uses it as-is.
+
+Don't explain the derivation unless asked. The reset times shown are the answer; how they were chosen is not what the user is deciding.
 
 **Always ask. Never read the log for this.** On a first run the log is empty or dominated by the last few minutes of installing this plugin, so anything computed from it is noise that reads as "roughly now" (see `adr/0004-setup-always-asks-for-the-anchor.md`). `compute_schedule.py` has no `--from-log` mode — don't reintroduce one.
 

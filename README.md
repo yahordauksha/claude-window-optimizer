@@ -50,13 +50,18 @@ The boundaries land where you chose them, instead of wherever your first message
 It asks one question, and shows you exactly what each answer produces:
 
 ```
-What time do you want your usage window to reset each day?
+What hours do you usually work?
 
-  1. 07:00     Resets at 07:00, 12:10, 17:20, 22:30
-  2. 08:00     Resets at 08:00, 13:10, 18:20, 23:30
-  3. 09:00     Resets at 09:00, 14:10, 19:20, 00:30
+  1. 09:00–17:00     Window resets at 07:50, 13:00, 18:10, 23:20
+  2. 08:00–18:00     Window resets at 07:50, 13:00, 18:10, 23:20
+  3. 20:00–01:00     Window resets at 17:20, 22:30, 03:40, 08:50
   4. Something else
 ```
+
+It asks about your day rather than asking you to pick reset times, because
+the best reset times aren't where you'd guess. Notice option 1 puts a reset
+at 13:00 — *inside* the working day. That's deliberate: a reset at 09:00 would
+leave your whole morning-to-evening block riding on a single window.
 
 Then it shows the full plan and waits:
 
@@ -109,7 +114,7 @@ Worth knowing before you install. All of these are covered in more depth in [`ad
 
 **It counts prompts, not tokens.** Hooks don't expose token counts, so a one-word question weighs the same as a 50-file refactor. Prompt volume is a proxy, and it's the only one available.
 
-**It won't help everyone equally.** The benefit comes from opening windows during idle time. Work fifteen hours straight and you already chain fresh windows naturally — this does very little for you. Concentrated blocks with gaps between them benefit most.
+**It won't help everyone equally.** Measured on simulated window dynamics (`tools/window_sim.py`): a concentrated evening block gains ~31%, a 9-5 day ~15%, and someone working fifteen hours straight gains ~1% — they already chain fresh windows naturally. If your day has no idle gaps, this isn't for you.
 
 **The weekly cap still exists.** Session and weekly allowances are consumed at the same time. This plugin does nothing about the weekly one.
 

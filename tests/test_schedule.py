@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from window_optimizer.schedule import (
     PING_INTERVAL_MINUTES,
     WINDOW_MINUTES,
+    anchor_for_working_hours,
+    best_anchor_for_histogram,
     build_schedule,
     compute_balanced_anchor,
     cron_for_minute_of_day,
@@ -280,3 +282,51 @@ def test_every_prompt_is_owned_at_every_phase(name, pattern):
     counts = usage_histogram(ts, NOW)
     for phi in (0, 1, 137, 313, 929, 1439):
         assert sum(segment_loads(counts, phi)) == sum(counts), f"{name}: phase {phi} loses prompts"
+
+
+# ---- Working-hours anchor derivation (ADR-0009) ----
+
+
+def test_anchor_for_working_hours_puts_a_reset_inside_the_block():
+    """The whole point: a reset partway through the block, not at its head. A reset at the
+    start leaves the entire block riding on one budget — which measured as zero benefit
+    over not installing the plugin at all, for a concentrated evening worker."""
+    for start_h, end_h in [(9, 17), (8, 18), (10, 16)]:
+        anchor = anchor_for_working_hours(start_h * 60, end_h * 60)
+        resets = slot_minutes_from_anchor(anchor)
+        inside = [r for r in resets if start_h * 60 < r < end_h * 60]
+        assert inside, f"{start_h}:00-{end_h}:00 got resets {sorted(resets)}, none inside the block"
+
+
+def test_anchor_for_working_hours_handles_an_overnight_block():
+    anchor = anchor_for_working_hours(20 * 60, 1 * 60)
+    resets = slot_minutes_from_anchor(anchor)
+    # 20:00-01:00 wraps midnight; a reset must land inside the wrapped span.
+    inside = [r for r in resets if r > 20 * 60 or r < 1 * 60]
+    assert inside, f"overnight block got resets {sorted(resets)}, none inside"
+
+
+def test_anchor_for_working_hours_is_deterministic():
+    assert anchor_for_working_hours(9 * 60, 17 * 60) == anchor_for_working_hours(9 * 60, 17 * 60)
+
+
+def test_anchor_for_working_hours_beats_using_the_start_time_directly():
+    """Regression guard on the measured improvement, using the shipped objective as proxy:
+    the derived anchor must not leave a heavier peak than naively anchoring at the start."""
+    for start_h, end_h in [(9, 17), (20, 25), (8, 18)]:
+        start, end = start_h * 60, (end_h * 60) % 1440
+        span = (end - start) % 1440 or 1440
+        counts = [0] * 1440
+        for k in range(span):
+            counts[(start + k) % 1440] = 1
+        derived = max(segment_loads(counts, anchor_for_working_hours(start, end)))
+        naive = max(segment_loads(counts, start))
+        assert derived <= naive, f"{start_h}:00 block: derived peak {derived} worse than naive {naive}"
+
+
+def test_best_anchor_for_histogram_matches_the_timestamp_path():
+    """Both entry points must run the same objective, or setup and /tune-pings would be
+    optimising different things and the initial schedule wouldn't converge on the tuned one."""
+    ts = _prompts([(d, [(9, 0), (10, 0), (11, 0), (14, 0)]) for d in range(1, 15)])
+    counts = usage_histogram(ts, NOW)
+    assert best_anchor_for_histogram(counts) == compute_balanced_anchor(ts, NOW)
