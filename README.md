@@ -65,17 +65,13 @@ recalculates the schedule from when you actually work.
 ```
 
 It asks about your day rather than asking you to pick reset times, because the
-best reset times aren't where you'd guess. Notice option 1 puts a reset at 13:00 —
-*inside* the working day. That's deliberate: a reset at 09:00 would leave your whole
-morning-to-evening block riding on one allowance. I had it the other way round at
-first and measured that it gave evening workers no benefit at all.
+best reset times aren't where you'd guess.
 
 Then it shows the full plan and waits:
 
 ```
 Your window will reset daily at 07:50, 13:00, 18:10, 23:20 (local).
-4 routines in your Cloud Routines list. Each sends a short message:
-Water, Stretch, Mood, Check-in. No tools, nothing fetched.
+4 routines in your Cloud Routines list. Each sends a short message.
 
 Create them?
 ```
@@ -96,9 +92,7 @@ Four fits a day. They're created once and then only ever **retimed** — never a
 
 ### What the resets actually say
 
-A reset works because *a message was sent* — the content is irrelevant to the mechanism. So each routine sends one short, self-contained line from a [fixed pool](lib/window_optimizer/ping_content.py): a stretch reminder, a posture check, "reply with just 'ok'". Four different ones, so your Routines list isn't four identical robots.
-
-They fetch nothing and get no tools at all. I originally had them read your GitHub repo's open issue titles, which sounded useful until a reviewer pointed out I'd wired an unattended agent to text any stranger could write by filing an issue — in exchange for nothing the mechanism actually needed. [ADR-0010](adr/0010-fixed-safe-prompt-pool.md) has the full story.
+A reset works because *a message was sent* — the content is irrelevant to the mechanism. So each routine sends one short, self-contained line from a [fixed pool](lib/window_optimizer/ping_content.py): a stretch reminder, a posture check, "reply with just 'ok'". Four different ones, so your Routines list isn't four identical robots. They fetch nothing and get no tools at all.
 
 ### The weekly tune-up
 
@@ -125,13 +119,11 @@ You'll get a nudge to run it after 7 days. It refuses to act on thin data rather
 
 **The weekly cap still exists.** Session and weekly allowances are consumed at the same time. This plugin does nothing about the weekly one.
 
-**Routines can't be deleted through the API.** Setup creates four; removing them is a manual step at [claude.ai/code/routines](https://claude.ai/code/routines). That's the real cost of installing this, and I couldn't design it away.
+**Routines can't be deleted through the API.** Setup creates four; removing them is a manual step at [claude.ai/code/routines](https://claude.ai/code/routines).
 
 ---
 
 ## Install
-
-### Everyone
 
 **Step 1 — install.** In a **normal terminal**; you don't need to start Claude Code first:
 
