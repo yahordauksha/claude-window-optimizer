@@ -22,9 +22,15 @@ Same discipline as this repo's installed `implement` skill: branch/worktree isol
 
 ### Design decisions are the Operator's to make
 
-The ping-spacing mechanism, how `/tune-pings` applies a schedule update, what a ping's content is allowed to be, and how that content gets chosen (auto-detected, never asked — see `adr/0003-auto-detect-instead-of-asking.md`, a direct Operator correction to ADR-0002's original "ask" stance) are resolved — see `adr/0001-cloud-routine-scheduling-constraints.md` through `adr/0007-balance-window-load-not-start-of-day.md`, all grounded in real, verified behavior, not assumed. For anything that would change those decisions, or any other change that materially reshapes the plugin (e.g. a new ping content kind), stop and ask using a concrete options-based question rather than reopening any ADR's reasoning ad hoc.
+The ping-spacing mechanism, how `/tune-pings` applies a schedule update, what a ping's content is allowed to be, and how that content gets chosen (auto-detected, never asked — see `adr/0003-auto-detect-instead-of-asking.md`, a direct Operator correction to ADR-0002's original "ask" stance) are resolved — see `adr/0001-cloud-routine-scheduling-constraints.md` through `adr/0008-only-auto-detect-repos-you-own.md`, all grounded in real, verified behavior, not assumed. For anything that would change those decisions, or any other change that materially reshapes the plugin (e.g. a new ping content kind), stop and ask using a concrete options-based question rather than reopening any ADR's reasoning ad hoc.
 
 Note the two ADRs pull in opposite directions on purpose, and that's not an inconsistency to "resolve" later: ping **content** is auto-detected and never asked (ADR-0003), while the **anchor** is always asked and never derived (ADR-0004). The difference is whether a reliable signal actually exists at setup time — a git remote is real and inspectable on day one; a usage pattern isn't, because the only thing in the log is the user installing this plugin. Don't make either one "consistent" with the other.
+
+### A UX simplification that changes what the system trusts is a security decision
+
+ADR-0003 removed a setup question on the Operator's instruction ("just make shit up"). That was right about the UX. It also, unremarked at the time, changed *whose text* this plugin feeds to an unattended agent — from "a repo you named" to "whatever `git remote origin` says in the current directory," i.e. any public repo on GitHub and therefore any stranger's issue titles. An outside review caught it; ADR-0008 narrows it to repos you own.
+
+When a change makes something automatic that used to be asked, state explicitly what the automatic version is now trusting, and whether that set is larger than before. "Fewer questions" and "wider trust" are easy to ship as one change and hard to separate afterward.
 
 ### Two vocabularies, on purpose
 

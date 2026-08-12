@@ -42,6 +42,28 @@ def detect_from_cwd_git_remote():
     return parse_github_remote(url) if url else None
 
 
+def authenticated_login():
+    """The GitHub account this machine is logged in as, or None if not authenticated."""
+    output = _run(["gh", "api", "user", "--jq", ".login"])
+    return output or None
+
+
+def is_owned_by(repo, login):
+    """True only if `repo` is 'login/something' (case-insensitive).
+
+    This is a trust boundary, not a nicety. The ping prompt asks an unattended
+    cloud agent to fetch a repo's open issue *titles* — text any stranger can
+    write by opening an issue. Auto-detection reads whatever `git remote origin`
+    says in whatever directory setup happened to run in, so without this check,
+    running setup inside a clone of someone else's project wires four daily
+    agents to attacker-authored text. Restricting to repos you own keeps
+    ADR-0003's no-questions UX while removing the arbitrary-internet-text path.
+    """
+    if not repo or not login:
+        return False
+    return repo.split("/", 1)[0].lower() == login.lower()
+
+
 def is_public_repo(repo):
     output = _run(["gh", "repo", "view", repo, "--json", "isPrivate"])
     if not output:
@@ -69,11 +91,26 @@ def detect_from_gh_recent_repos():
 
 
 def main():
+    login = authenticated_login()
+    if not login:
+        # Can't establish who we are, so can't establish that any repo is ours.
+        # Fall back to a plain keep-alive rather than trusting an unowned repo.
+        print(json.dumps({"repo": None, "reason": "not_authenticated"}))
+        return
+
     repo = detect_from_cwd_git_remote()
+    if repo and not is_owned_by(repo, login):
+        # The current directory is someone else's project. Don't wire a daily
+        # unattended agent to its issue tracker just because we're standing in it.
+        repo = None
     if repo and not is_public_repo(repo):
         repo = None
     if not repo:
-        repo = detect_from_gh_recent_repos()
+        # `gh repo list` with no argument returns only the authenticated user's
+        # own repos, so this path is owned by construction — but re-check anyway
+        # rather than relying on that behaviour staying true.
+        candidate = detect_from_gh_recent_repos()
+        repo = candidate if is_owned_by(candidate, login) else None
     print(json.dumps({"repo": repo}))
 
 

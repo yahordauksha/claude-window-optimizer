@@ -95,3 +95,62 @@ def test_main_detects_this_repos_own_real_remote():
     # This repo's own real origin — the strongest possible regression check
     # that the cwd-git-remote path and the public-repo confirmation both work.
     assert data["repo"] == "yahordauksha/claude-window-optimizer"
+
+
+# ---- Ownership trust boundary (see ADR-0008) ----
+
+
+def test_is_owned_by_rejects_someone_elses_repo():
+    assert detect_repo.is_owned_by("facebook/react", "yahordauksha") is False
+
+
+def test_is_owned_by_accepts_own_repo_case_insensitively():
+    assert detect_repo.is_owned_by("yahordauksha/thing", "yahordauksha") is True
+    assert detect_repo.is_owned_by("YahorDauksha/thing", "yahordauksha") is True
+
+
+def test_is_owned_by_rejects_missing_inputs():
+    assert detect_repo.is_owned_by(None, "someone") is False
+    assert detect_repo.is_owned_by("a/b", None) is False
+
+
+def test_main_refuses_a_foreign_cwd_repo(tmp_path, monkeypatch, capsys):
+    """The reviewer's finding: running setup inside a clone of someone else's project
+    wired four unattended daily agents to that project's issue titles — text any
+    stranger can write. It must not be selectable, whatever the cwd says."""
+    _init_git_repo_with_remote(tmp_path, "https://github.com/facebook/react.git")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(detect_repo, "authenticated_login", lambda: "yahordauksha")
+    monkeypatch.setattr(detect_repo, "detect_from_gh_recent_repos", lambda: None)
+    detect_repo.main()
+    assert json.loads(capsys.readouterr().out)["repo"] is None
+
+
+def test_main_accepts_an_owned_cwd_repo(tmp_path, monkeypatch, capsys):
+    _init_git_repo_with_remote(tmp_path, "https://github.com/yahordauksha/mine.git")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(detect_repo, "authenticated_login", lambda: "yahordauksha")
+    monkeypatch.setattr(detect_repo, "is_public_repo", lambda repo: True)
+    detect_repo.main()
+    assert json.loads(capsys.readouterr().out)["repo"] == "yahordauksha/mine"
+
+
+def test_main_falls_back_to_keepalive_when_not_authenticated(tmp_path, monkeypatch, capsys):
+    """No identity means no way to establish ownership — refuse rather than guess."""
+    _init_git_repo_with_remote(tmp_path, "https://github.com/yahordauksha/mine.git")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(detect_repo, "authenticated_login", lambda: None)
+    detect_repo.main()
+    out = json.loads(capsys.readouterr().out)
+    assert out["repo"] is None
+    assert out["reason"] == "not_authenticated"
+
+
+def test_main_rejects_a_foreign_repo_from_the_gh_fallback(tmp_path, monkeypatch, capsys):
+    """`gh repo list` returns only your own repos today; don't depend on that staying true."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(detect_repo, "authenticated_login", lambda: "yahordauksha")
+    monkeypatch.setattr(detect_repo, "detect_from_cwd_git_remote", lambda: None)
+    monkeypatch.setattr(detect_repo, "detect_from_gh_recent_repos", lambda: "someone-else/repo")
+    detect_repo.main()
+    assert json.loads(capsys.readouterr().out)["repo"] is None

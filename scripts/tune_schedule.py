@@ -103,11 +103,21 @@ def main():
             }
         )
 
+    # Whether anything actually needs pushing to the API is a question about the
+    # *cron expressions*, not about the anchor. Those come apart across a DST
+    # transition: the habit is in local wall-clock time, so the anchor is
+    # unchanged (08:00 -> 08:00) while the correct UTC cron shifts an hour
+    # (0 7 * * * -> 0 6 * * *). Keying the decision off the anchor meant the
+    # corrected cron was computed and then thrown away in exactly the case the
+    # DST note in schedule.py claimed /tune-pings would self-correct.
+    cron_changed = any(s["old_cron_expression"] != s["new_cron_expression"] for s in slots)
+
     print(
         json.dumps(
             {
                 "old_anchor_local_hhmm": routines_state.get("anchor_local_hhmm"),
                 "new_anchor_local_hhmm": f"{new_anchor_minutes // 60:02d}:{new_anchor_minutes % 60:02d}",
+                "cron_changed": cron_changed,
                 "logged_days": logged_days_in_window(timestamps, now_local),
                 "trailing_days": 28,
                 "slots": slots,
