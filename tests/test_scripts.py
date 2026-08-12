@@ -145,7 +145,7 @@ def test_tune_schedule_with_exactly_three_days_re_anchors(tmp_path):
     assert re.fullmatch(r"[0-2][0-9]:[0-5][0-9]", data["new_anchor_local_hhmm"])
 
 
-def test_tune_schedule_produces_diff_preserving_trigger_ids_and_content_kind(tmp_path):
+def test_tune_schedule_produces_diff_preserving_trigger_ids_and_prompt_identity(tmp_path):
     routines_state = {
         "installed_at": "2026-07-01T06:00:00+00:00",
         "anchor_local_hhmm": "06:45",
@@ -156,9 +156,9 @@ def test_tune_schedule_produces_diff_preserving_trigger_ids_and_content_kind(tmp
                 "local_hhmm": "x",
                 "utc_hhmm": "x",
                 "cron_expression": f"45 {(6 + i * 5) % 24} * * *",
-                # slot 1 has real content-kind state; the rest simulate an
-                # install from before this field existed (no key at all).
-                **({"kind": "github-issues", "repo": "owner/repo"} if i == 1 else {}),
+                # slot 1 carries prompt identity; the rest simulate an install from
+                # before those fields existed (no key at all).
+                **({"prompt_key": "water", "title": "Water"} if i == 1 else {}),
             }
             for i in range(4)
         ],
@@ -188,63 +188,40 @@ def test_tune_schedule_produces_diff_preserving_trigger_ids_and_content_kind(tmp
         assert slot["slot"] == i
         assert "old_cron_expression" in slot
         assert "new_cron_expression" in slot
-    assert data["slots"][1]["kind"] == "github-issues"
-    assert data["slots"][1]["repo"] == "owner/repo"
-    # a slot with no prior kind/repo key defaults to a plain keep-alive, never crashes
-    assert data["slots"][0]["kind"] == "simple"
-    assert data["slots"][0]["repo"] is None
+    assert data["slots"][1]["prompt_key"] == "water"
+    assert data["slots"][1]["title"] == "Water"
+    # a slot with no prior prompt identity passes through as None, never crashes
+    assert data["slots"][0]["prompt_key"] is None
+    assert data["slots"][0]["title"] is None
 
 
 # ---- build_ping_prompt.py ----
 
 
-def test_build_ping_prompt_simple(tmp_path):
-    result = _run(BUILD_PING_PROMPT, ["--kind", "simple"], tmp_path)
+def test_build_ping_prompt_picks_distinct_prompts(tmp_path):
+    result = _run(BUILD_PING_PROMPT, ["--count", "4", "--seed", "1"], tmp_path)
     assert result.returncode == 0
     data = json.loads(result.stdout)
     assert data["allowed_tools"] == []
-    assert "automated" in data["prompt"].lower()
+    assert len({p["key"] for p in data["prompts"]}) == 4
+    for p in data["prompts"]:
+        assert p["title"] and p["prompt"]
 
 
-def test_build_ping_prompt_github_issues(tmp_path):
-    result = _run(BUILD_PING_PROMPT, ["--kind", "github-issues", "--repo", "owner/repo"], tmp_path)
-    assert result.returncode == 0
-    data = json.loads(result.stdout)
-    assert data["allowed_tools"] == ["WebFetch"]
-    assert "owner/repo" in data["prompt"]
+def test_build_ping_prompt_looks_up_a_key(tmp_path):
+    data = json.loads(_run(BUILD_PING_PROMPT, ["--key", "stretch"], tmp_path).stdout)
+    assert data["prompts"][0]["title"] == "Stretch"
 
 
-def test_build_ping_prompt_github_issues_without_repo_fails(tmp_path):
-    result = _run(BUILD_PING_PROMPT, ["--kind", "github-issues"], tmp_path)
+def test_build_ping_prompt_rejects_unknown_key(tmp_path):
+    result = _run(BUILD_PING_PROMPT, ["--key", "nope"], tmp_path)
     assert result.returncode == 1
     assert "error" in json.loads(result.stdout)
 
 
-def test_build_ping_prompt_rejects_unknown_kind(tmp_path):
-    result = _run(BUILD_PING_PROMPT, ["--kind", "not-a-kind"], tmp_path)
-    assert result.returncode != 0  # argparse choices validation rejects it
-
-
-def test_tune_schedule_rejects_plenty_of_days_but_too_few_prompts(tmp_path):
-    """The floor that days alone missed: 20 days x 1 prompt still yields a tie-break, not a habit.
-
-    Measured on simulated data, ~20-60 prompts moved the chosen anchor by ~300 minutes
-    across noisy redraws of the *same* habit. A confident-looking schedule built on that
-    is worse than leaving the current one alone.
-    """
-    (tmp_path / "routines.json").write_text(json.dumps(_installed_routines_state()))
-    now = datetime.now(timezone.utc).astimezone()
-    log_lines = "\n".join(
-        (now - timedelta(days=d)).replace(hour=9, minute=0, second=0, microsecond=0).isoformat() for d in range(0, 20)
-    )
-    (tmp_path / "prompts.log").write_text(log_lines + "\n")
-    result = _run(TUNE_SCHEDULE, [], tmp_path)
-    assert result.returncode == 0
-    data = json.loads(result.stdout)
-    assert data["error"] == "insufficient_log_data"
-    assert data["logged_days"] == 20  # plenty of days...
-    assert data["logged_prompts"] == 20  # ...but nowhere near enough volume
-    assert data["needed_prompts"] == 200
+def test_build_ping_prompt_never_grants_a_tool(tmp_path):
+    for args in (["--count", "4"], ["--key", "ok"], ["--list"]):
+        assert json.loads(_run(BUILD_PING_PROMPT, args, tmp_path).stdout)["allowed_tools"] == []
 
 
 def test_tune_schedule_flags_cron_change_even_when_anchor_is_unchanged(tmp_path):

@@ -1,3 +1,4 @@
+import random
 import sys
 from pathlib import Path
 
@@ -5,48 +6,70 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
 import pytest
 from window_optimizer.ping_content import (
-    PING_KIND_GITHUB_ISSUES,
-    PING_KIND_SIMPLE,
-    allowed_tools_for_kind,
-    github_issues_prompt,
-    prompt_for_kind,
-    simple_ping_prompt,
+    SAFE_PROMPTS,
+    allowed_tools,
+    pick_prompts,
+    prompt_for_key,
 )
 
 
-def test_simple_ping_prompt_self_identifies_as_automated():
-    prompt = simple_ping_prompt()
-    assert "automated" in prompt.lower()
-    assert "claude-window-optimizer" in prompt
+def test_no_prompt_needs_a_tool():
+    assert allowed_tools() == []
 
 
-def test_simple_ping_prompt_needs_no_tools():
-    assert allowed_tools_for_kind(PING_KIND_SIMPLE) == []
+def test_no_prompt_references_external_data():
+    """The whole reason this pool exists: an earlier design had resets fetch a GitHub
+    repo's issue titles, feeding stranger-authored text to an unattended agent. Nothing
+    in the pool may reach outside itself."""
+    forbidden = ("http://", "https://", "api.", "fetch", "webfetch", "curl", "github", "read the", "look up")
+    for key, entry in SAFE_PROMPTS.items():
+        text = entry["prompt"].lower()
+        for token in forbidden:
+            assert token not in text, f"{key!r} prompt references external data: {token!r}"
 
 
-def test_github_issues_prompt_uses_public_unauthenticated_api():
-    prompt = github_issues_prompt("owner/repo")
-    assert "api.github.com/repos/owner/repo/issues" in prompt
-    assert "state=open" in prompt
-    # never a private-repo-only endpoint or anything implying auth is available
-    assert "token" not in prompt.lower()
-    assert "gh auth" not in prompt.lower()
+def test_every_entry_has_a_title_and_prompt():
+    for key, entry in SAFE_PROMPTS.items():
+        assert entry["title"].strip(), f"{key} has no title"
+        assert entry["prompt"].strip(), f"{key} has no prompt"
 
 
-def test_github_issues_prompt_grants_only_webfetch():
-    assert allowed_tools_for_kind(PING_KIND_GITHUB_ISSUES) == ["WebFetch"]
+def test_prompts_stay_short():
+    """These fire four times a day on the cheapest model; a long prompt is wasted spend."""
+    for key, entry in SAFE_PROMPTS.items():
+        assert len(entry["prompt"]) <= 120, f"{key} prompt is {len(entry['prompt'])} chars"
 
 
-def test_github_issues_prompt_requires_repo():
+def test_prompt_for_key_returns_the_entry():
+    got = prompt_for_key("water")
+    assert got["key"] == "water"
+    assert got["title"] == "Water"
+    assert "water" in got["prompt"].lower()
+
+
+def test_prompt_for_key_rejects_unknown():
     with pytest.raises(ValueError):
-        prompt_for_kind(PING_KIND_GITHUB_ISSUES, repo=None)
+        prompt_for_key("definitely-not-a-key")
 
 
-def test_prompt_for_kind_dispatches_correctly():
-    assert prompt_for_kind(PING_KIND_SIMPLE) == simple_ping_prompt()
-    assert prompt_for_kind(PING_KIND_GITHUB_ISSUES, repo="a/b") == github_issues_prompt("a/b")
+def test_pick_prompts_returns_distinct_entries():
+    """Four routines saying the same thing four times a day would be worse than useless."""
+    picked = pick_prompts(4, rng=random.Random(0))
+    assert len(picked) == 4
+    assert len({p["key"] for p in picked}) == 4
 
 
-def test_prompt_for_kind_rejects_unknown_kind():
+def test_pick_prompts_is_reproducible_with_a_seed():
+    a = pick_prompts(4, rng=random.Random(42))
+    b = pick_prompts(4, rng=random.Random(42))
+    assert [p["key"] for p in a] == [p["key"] for p in b]
+
+
+def test_pick_prompts_actually_varies():
+    seen = {tuple(p["key"] for p in pick_prompts(4, rng=random.Random(s))) for s in range(20)}
+    assert len(seen) > 1, "picker returned the same set for every seed"
+
+
+def test_pick_prompts_refuses_more_than_the_pool_holds():
     with pytest.raises(ValueError):
-        prompt_for_kind("not-a-real-kind")
+        pick_prompts(len(SAFE_PROMPTS) + 1)
