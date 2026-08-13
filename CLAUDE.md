@@ -11,6 +11,25 @@ A Claude Code plugin (not a service, no backend) — see `README.md` for what it
 - Tests: `pytest`, dev-only dependency (never required at hook-runtime).
 - Lint: `ruff`.
 
+## Releasing: bump `version` or nobody gets the change
+
+`.claude-plugin/plugin.json`'s `version` is the **only** update signal. The plugin
+cache is keyed by that string, not by commit, so pushing a fix without bumping it
+means installed copies never receive it — not late, never. Demonstrated: with the
+repo one commit ahead and the version unchanged, `plugin marketplace update`
+followed by `plugin update` reported *"already at the latest version (1.0.0)"* and
+the cached build did not contain the new commit.
+
+So: **bump `version` in the same commit as any change that ships**, however small.
+
+Two related facts worth knowing:
+- Updating needs *both* `claude plugin marketplace update <name>` (re-pull the
+  catalogue clone) and `claude plugin update <plugin>@<marketplace>` (install it).
+  The first alone changes nothing installed; the second alone re-reads a stale clone.
+- Auto-update is **off** by default for third-party marketplaces like this one —
+  only Anthropic's official marketplace defaults to on. Assume users will not
+  update unless told to.
+
 ## Two `.claude` surfaces — don't confuse them
 
 - **`.claude/agents/`, `.claude/commands/`** — this repo's own implementation pipeline (core-implementer, test-writer, edge-case-auditor, triage, implement, spec, shape, queue-scout, cleanup), installed from `yahordauksha/agent-ecosystem`. Used to *build* this plugin. Never shipped to end users.
