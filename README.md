@@ -174,6 +174,8 @@ claude plugin update claude-window-optimizer@claude-window-optimizer
 
 Both steps are needed — the first refreshes the catalogue, the second pulls the new version. Without the refresh you'll reinstall whatever is already cached.
 
+**Updates don't arrive on their own.** Auto-update is off by default for marketplaces outside Anthropic's official one, so you'll stay on the version you installed until you run the two commands above. To have future versions come to you instead, run `/plugin`, open **Marketplaces**, select `claude-window-optimizer`, and choose **Enable auto-update**. Worth doing — if I ship a fix that matters, that's the difference between getting it and not knowing it exists.
+
 ### Uninstalling
 
 ```bash
