@@ -41,22 +41,25 @@ Measured against the old estimator on the same data: the three stray pings that 
 
 ## Follow-up found by stress-testing this ADR's own implementation
 
-The optimiser is verified correct against its objective (brute-forced against all 1440 phases across seven usage profiles). But correct-against-its-objective is not the same as *well-determined*, and the guard protecting it was gating on the wrong axis.
+The optimiser is verified correct against its objective (brute-forced against all 1440 phases across seven profiles, now committed as a test). But correct-against-its-objective is not the same as *well-determined*, and the guard protecting it has been wrong twice, in two different ways. Both were caught by outside reviewers rather than by this repo's own tests.
 
-`MIN_LOGGED_DAYS_TO_TRUST_ANCHOR = 3` counted **days**, not volume — so 21 prompts spread across 7 days passed the floor and produced a schedule that was ~65% tie-break (930 of 1440 phases scored identically).
+**First error: gating on the wrong axis.** `MIN_LOGGED_DAYS_TO_TRUST_ANCHOR = 3` counted days, not volume — so 21 prompts across 7 days passed the floor and produced a schedule that was ~65% tie-break.
 
-The first attempt at fixing this published a stability table with no stated profile, noise model, or trial count. An independent reviewer could not reproduce it and got materially different numbers, which made the threshold it justified unfalsifiable — a judgment call presented as a measurement, in an ADR, which is the same inward-pointing failure this review was meant to catch. The method is now committed as `tools/measure_anchor_stability.py` (fixed seed, stated habit, stated jitter) and reproduces byte-identically:
+**Second error: a statistic that cannot converge.** The replacement cited a table of *maximum* pairwise anchor spread, described as "deliberately pessimistic". A maximum over pairs grows monotonically with trial count by construction. Measured directly: at 500 prompts, 10 trials gave 27 min and 20 trials gave 321 min from the same generator. Any threshold defended by that number was defended by sampling noise, and re-running the committed script reproduced neither the table nor its central claim.
 
-| prompts | worst spread | median spread |
+**What the measurement should have been.** Anchor *position* was never the right quantity. On a flat habit many phases score identically, so the chosen anchor drifts between equally good options — position spread stays high while the schedule the user actually receives is unchanged. Measuring quality instead (spread in peak segment load) gives a clean monotonic convergence:
+
+| prompts | anchor p90 | quality spread |
 |---|---|---|
-| 20 | 355 min | 116 min |
-| 60 | 245 min | 60 min |
-| 100 | 275 min | 26 min |
-| **150** | **295 min** | 27 min |
-| **200** | **67 min** | 21 min |
-| 500 | 29 min | 8 min |
+| 20 | 172 min | 4.99 pp |
+| 60 | 277 min | 1.52 pp |
+| 80 | 69 min | 0.52 pp |
+| 200 | 47 min | 0.20 pp |
+| 500 | 293 min | **0.13 pp** |
 
-The reproducible numbers **contradict the original threshold**: 150 sits inside the unstable band, not past it. The floor is now **200**, where the worst case actually collapses. Worst case rather than median is deliberate — withholding a tune-up costs a week of slightly-stale schedule, while acting on noise rewrites a schedule the user is relying on.
+The 500-prompt row is the clearest statement of the whole problem: the worst anchor wander in the table, alongside the best schedule quality in the table.
+
+`MIN_PROMPTS_TO_TRUST_ANCHOR` stays at **200**. Quality is settled by ~80, so 200 is a conservative margin rather than a measured cliff — and it is now described that way instead of being dressed up as one. At 200 prompts over 28 days (~7/day) nearly any real user qualifies, so the margin costs almost nothing. `tools/measure_anchor_stability.py` reports median, p90 and quality; `test_schedule_quality_converges_with_volume` pins the direction of the relationship so a third silent staleness isn't possible.
 
 ## Consequences
 

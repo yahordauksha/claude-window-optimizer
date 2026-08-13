@@ -10,13 +10,27 @@ is the missing method: fixed seed, stated profile, stated noise, runnable.
     python3 tools/measure_anchor_stability.py
 
 Method: draw `trials` independent logs from the *same* underlying habit, differing
-only in noise, and measure how far apart the chosen anchors land (max circular
-distance between any two). A well-determined estimate should barely move; a
-poorly-determined one wanders, and any schedule derived from it is a coin flip
-wearing a measurement's clothes.
+only in noise, and measure how far apart the chosen anchors land. A well-determined
+estimate barely moves; a poorly-determined one wanders, and any schedule derived
+from it is a coin flip wearing a measurement's clothes.
 
-Reported spread is a worst-case (max over all pairs), not a standard deviation —
-so it is deliberately pessimistic and comparable across rows.
+Reports two things, and the second is the one that matters:
+
+  * how far the chosen anchor moves (median / p90 pairwise circular distance)
+  * how much the resulting schedule's quality moves (spread in peak segment load)
+
+A wandering anchor is only a problem if the schedules it picks are worse. On a
+flat habit many phases score identically, so the anchor drifts between equally
+good options — position spread stays high while quality spread goes to zero.
+Gating on position alone would withhold a perfectly good tune-up.
+
+An earlier version of this script reported the *maximum* pairwise distance,
+described as "deliberately pessimistic". That was a mistake, and a third reviewer
+caught it: a maximum over pairs grows monotonically with the number of trials, so
+it cannot converge and is not an estimator of anything. Measured directly — at 500
+prompts, 10 trials gave 27 min and 20 trials gave 321 min from the same generator.
+Percentiles converge; maxima do not. Any threshold justified by the old numbers was
+justified by sampling noise.
 """
 
 import argparse
@@ -28,7 +42,12 @@ from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
 
-from window_optimizer.schedule import MINUTES_PER_DAY, compute_balanced_anchor  # noqa: E402
+from window_optimizer.schedule import (  # noqa: E402
+    MINUTES_PER_DAY,
+    compute_balanced_anchor,
+    segment_loads,
+    usage_histogram,
+)
 
 # One fixed, stated habit so rows differ only by volume: a working day roughly
 # 09:00-17:00, each prompt jittered by a normal draw. Nothing about the result
@@ -57,35 +76,40 @@ def circular_distance(a, b):
 
 def measure(total_prompts, days, trials, seed):
     rnd = random.Random(seed)
-    anchors = []
+    anchors, qualities = [], []
     for _ in range(trials):
-        anchor = compute_balanced_anchor(draw_log(rnd, total_prompts, days), NOW)
-        if anchor is not None:
-            anchors.append(anchor)
+        log = draw_log(rnd, total_prompts, days)
+        anchor = compute_balanced_anchor(log, NOW)
+        if anchor is None:
+            continue
+        anchors.append(anchor)
+        counts = usage_histogram(log, NOW)
+        total = max(1, sum(counts))
+        qualities.append(max(segment_loads(counts, anchor)) / total)
     if len(anchors) < 2:
-        return None, None
-    spread = max(circular_distance(a, b) for a in anchors for b in anchors)
-    pairwise = [circular_distance(a, b) for i, a in enumerate(anchors) for b in anchors[i + 1 :]]
-    return spread, statistics.median(pairwise)
+        return None, None, None
+    pairwise = sorted(circular_distance(a, b) for i, a in enumerate(anchors) for b in anchors[i + 1 :])
+    p90 = pairwise[min(len(pairwise) - 1, int(0.9 * len(pairwise)))]
+    return statistics.median(pairwise), p90, statistics.pstdev(qualities) * 100
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--days", type=int, default=14)
-    parser.add_argument("--trials", type=int, default=15)
+    parser.add_argument("--trials", type=int, default=25)
     parser.add_argument("--seed", type=int, default=1)
     args = parser.parse_args()
 
     print(f"habit: {WORKDAY_START_MIN // 60:02d}:00-{WORKDAY_END_MIN // 60:02d}:00, ", end="")
     print(f"jitter sd={JITTER_STDDEV_MIN}min, days={args.days}, trials={args.trials}, seed={args.seed}")
     print()
-    print(f"{'prompts':>8} {'worst spread':>13} {'median spread':>14}")
-    for total in (20, 40, 60, 80, 100, 120, 150, 200, 300, 500):
-        worst, median = measure(total, args.days, args.trials, args.seed)
-        if worst is None:
-            print(f"{total:>8} {'n/a':>13} {'n/a':>14}")
+    print(f"{'prompts':>8} {'anchor median':>14} {'anchor p90':>12} {'quality spread':>16}")
+    for total in (20, 40, 60, 80, 100, 150, 200, 300, 500):
+        median, p90, quality = measure(total, args.days, args.trials, args.seed)
+        if median is None:
+            print(f"{total:>8} {'n/a':>14} {'n/a':>12} {'n/a':>16}")
             continue
-        print(f"{total:>8} {worst:>10} min {median:>11} min")
+        print(f"{total:>8} {median:>11.0f} min {p90:>9.0f} min {quality:>13.2f} pp")
 
 
 if __name__ == "__main__":
