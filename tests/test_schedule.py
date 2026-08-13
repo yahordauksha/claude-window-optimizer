@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
 from window_optimizer.schedule import (
+    MIN_PROMPTS_TO_TRUST_ANCHOR,
     PING_INTERVAL_MINUTES,
     WINDOW_MINUTES,
     anchor_for_working_hours,
@@ -330,3 +331,42 @@ def test_best_anchor_for_histogram_matches_the_timestamp_path():
     ts = _prompts([(d, [(9, 0), (10, 0), (11, 0), (14, 0)]) for d in range(1, 15)])
     counts = usage_histogram(ts, NOW)
     assert best_anchor_for_histogram(counts) == compute_balanced_anchor(ts, NOW)
+
+
+def test_schedule_quality_converges_with_volume():
+    """Pins the qualitative claim behind MIN_PROMPTS_TO_TRUST_ANCHOR so the comment
+    citing it can't silently go stale — which it has done twice, caught both times by
+    outside reviewers rather than by the suite.
+
+    Deliberately asserts on schedule *quality*, not anchor position. Position wanders
+    between phases that score identically on a flat habit; quality is what a user
+    actually receives. Loose bounds on purpose: this guards the direction of the
+    relationship, not any specific published number.
+    """
+    import random
+    import statistics
+
+    def quality_spread(total_prompts, seed):
+        rnd = random.Random(seed)
+        qualities = []
+        for _ in range(8):
+            ts = []
+            for day in range(1, 15):
+                for _ in range(max(1, total_prompts // 14)):
+                    minute = rnd.uniform(9 * 60, 17 * 60) + rnd.gauss(0, 25)
+                    ts.append(
+                        datetime(2026, 8, 10, tzinfo=timezone.utc)
+                        - timedelta(days=day)
+                        + timedelta(minutes=minute % 1440)
+                    )
+            anchor = compute_balanced_anchor(ts, NOW)
+            counts = usage_histogram(ts, NOW)
+            qualities.append(max(segment_loads(counts, anchor)) / max(1, sum(counts)))
+        return statistics.pstdev(qualities) * 100
+
+    sparse = quality_spread(20, seed=1)
+    dense = quality_spread(300, seed=1)
+    assert dense < sparse, f"more data should not make schedule quality less stable ({dense:.2f}pp vs {sparse:.2f}pp)"
+    assert dense < 1.5, (
+        f"quality should be settled well before the {MIN_PROMPTS_TO_TRUST_ANCHOR}-prompt floor, got {dense:.2f}pp"
+    )

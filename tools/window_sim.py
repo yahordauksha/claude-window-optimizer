@@ -87,20 +87,29 @@ def simulate(prompt_minutes, reset_minutes_of_day, days, window_minutes=WINDOW_M
 def main():
     import random
 
-    from window_optimizer.schedule import slot_minutes_from_anchor
+    from window_optimizer.schedule import anchor_for_working_hours, slot_minutes_from_anchor
 
+    # Each profile carries the working hours a user would actually state at setup,
+    # so the "with plugin" column uses the anchor the plugin really derives — not a
+    # hardcoded one. An earlier version of this main() scored every profile against
+    # a fixed 08:00 anchor while the ADR and README cited it as evidence for the
+    # working-hours derivation. It produced similar-looking percentages for an
+    # unrelated scenario, which is worse than producing none. Caught in review.
     profiles = {
-        "9-5 steady": [(9 * 60, 17 * 60)],
-        "evening 20:00-01:00": [(20 * 60, 25 * 60)],
-        "split day": [(8 * 60, 10 * 60), (19 * 60, 25 * 60)],
-        "bursty 09-18": [(9 * 60, 11 * 60), (14 * 60, 18 * 60)],
-        "long day 08-23": [(8 * 60, 23 * 60)],
+        "9-5 steady": ([(9 * 60, 17 * 60)], (9 * 60, 17 * 60)),
+        "evening 20:00-01:00": ([(20 * 60, 25 * 60)], (20 * 60, 1 * 60)),
+        "split day": ([(8 * 60, 10 * 60), (19 * 60, 25 * 60)], (8 * 60, 1 * 60)),
+        "bursty 09-18": ([(9 * 60, 11 * 60), (14 * 60, 18 * 60)], (9 * 60, 18 * 60)),
+        "long day 08-23": ([(8 * 60, 23 * 60)], (8 * 60, 23 * 60)),
     }
     days, per_day = 28, 35
-    print(f"{days} days, {per_day} prompts/day, mean of 30 seeds\n")
-    print(f"{'profile':22s} {'no plugin':>10} {'with plugin':>12} {'change':>9} {'wasted resets':>14}")
-    for name, blocks in profiles.items():
-        base, opt, waste = [], [], []
+    print(f"{days} days, {per_day} prompts/day, mean of 30 seeds")
+    print("'with plugin' uses the anchor derived from each profile's stated hours.\n")
+    header = f"{'profile':22s} {'no plugin':>10} {'with plugin':>12} {'change':>9} {'best possible':>14}"
+    print(header)
+    for name, (blocks, hours) in profiles.items():
+        anchor = anchor_for_working_hours(*hours)
+        base, opt, best = [], [], []
         for seed in range(30):
             rnd = random.Random(seed)
             prompts = []
@@ -110,13 +119,11 @@ def main():
                     prompts.append(day * MINUTES_PER_DAY + int(rnd.uniform(lo, hi)) % MINUTES_PER_DAY)
             prompts.sort()
             base.append(simulate(prompts, [], days).peak_load)
-            anchor = 8 * 60
-            r = simulate(prompts, slot_minutes_from_anchor(anchor), days)
-            opt.append(r.peak_load)
-            waste.append(r.resets_wasted)
-        b, o = sum(base) / len(base), sum(opt) / len(opt)
+            opt.append(simulate(prompts, slot_minutes_from_anchor(anchor), days).peak_load)
+            best.append(min(simulate(prompts, slot_minutes_from_anchor(a), days).peak_load for a in range(0, 1440, 30)))
+        b, o, bp = (sum(x) / len(x) for x in (base, opt, best))
         pct = (b - o) / b * 100 if b else 0
-        print(f"{name:22s} {b:10.1f} {o:12.1f} {pct:8.1f}% {sum(waste) / len(waste):14.1f}")
+        print(f"{name:22s} {b:10.1f} {o:12.1f} {pct:8.1f}% {bp:14.1f}")
 
 
 if __name__ == "__main__":

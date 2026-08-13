@@ -35,30 +35,35 @@ DEFAULT_TRAILING_DAYS = 28
 # a "pattern," it's just whatever time setup happened to be run.
 MIN_LOGGED_DAYS_TO_TRUST_ANCHOR = 3
 
-# ...and days alone are not enough. The optimiser scores phases by how much
-# usage each window absorbs, so its answer is only as well-determined as the
-# volume behind it. Reproduce with:
+# ...and days alone are not enough: the optimiser's answer is only as
+# well-determined as the volume behind it. Reproduce with:
 #
 #     python3 tools/measure_anchor_stability.py
 #
-# which draws repeated logs from one fixed habit differing only in noise and
-# reports how far apart the chosen anchors land (worst case over all pairs):
+# Read the *quality* column, not the anchor column. Repeated draws from one
+# fixed habit give:
 #
-#     prompts   worst spread   median spread
-#          20        355 min         116 min
-#          60        245 min          60 min
-#         100        275 min          26 min
-#         150        295 min          27 min      <- still wandering
-#         200         67 min          21 min      <- worst case finally collapses
-#         500         29 min           8 min
+#     prompts   anchor p90   quality spread
+#          20      172 min          4.99 pp
+#          60      277 min          1.52 pp
+#          80       69 min          0.52 pp
+#         200       47 min          0.20 pp
+#         500      293 min          0.13 pp
 #
-# An earlier revision of this file put the floor at 150 and cited a table with
-# no stated profile, noise model, or trial count; an outside reviewer could not
-# reproduce it, and the reproducible version above shows 150 sits inside the
-# unstable band rather than past it. 200 is where the worst case actually drops.
-# Worst case (not median) is the metric on purpose: withholding a tune-up costs
-# a week of slightly-stale schedule, while acting on noise rewrites a schedule
-# the user is relying on.
+# The anchor position wanders — sometimes badly, and not monotonically — because
+# a flat habit has many phases that score identically, so the choice drifts
+# between equally good options. Schedule *quality* converges cleanly and is what
+# actually matters. 200 is a deliberately conservative floor: quality is already
+# settled by ~80, and at 200 prompts over 28 days (~7/day) almost any real user
+# qualifies, so the cost of the margin is close to zero.
+#
+# Two earlier revisions of this comment got this wrong and both were caught by
+# reviewers. The first cited a table with no reproduction method. The second
+# reported the *maximum* pairwise spread, which grows with trial count by
+# construction and therefore cannot converge — at 500 prompts, 10 trials gave
+# 27 min and 20 trials gave 321 min from the same generator. Any threshold
+# defended by that number was defended by sampling noise. If you change this
+# constant, re-run the script and read the quality column.
 MIN_PROMPTS_TO_TRUST_ANCHOR = 200
 
 

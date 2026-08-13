@@ -115,7 +115,7 @@ You'll get a nudge to run it after 7 days. It refuses to act on thin data rather
 
 **It counts prompts, not tokens.** Hooks don't expose token counts, so a one-word question weighs the same as a 50-file refactor. Prompt volume is a proxy — it's the only signal I can actually get at.
 
-**It won't help everyone equally.** I simulated the window dynamics (`tools/window_sim.py`) across a few working patterns: a concentrated evening block gains ~31%, a 9-5 day ~15%, and someone working fifteen hours straight gains ~1% — they already chain fresh windows naturally. If your day has no idle gaps, this isn't for you.
+**It won't help everyone equally.** I simulated the window dynamics (`tools/window_sim.py`): a concentrated evening block gains ~36%, a 9-5 day ~14%, and someone working fifteen hours straight ~1% — they already chain fresh windows naturally. It also does roughly nothing for a split day (a morning block and a late evening block with a long gap between), because four evenly-spaced resets can't line up with two separate stretches. Best case is one concentrated block of work; worst case is no gaps at all, or several scattered ones.
 
 **The weekly cap still exists.** Session and weekly allowances are consumed at the same time. This plugin does nothing about the weekly one.
 
