@@ -9,7 +9,7 @@
     {
       "name": "claude-window-optimizer",
       "source": "./",
-      "description": "Keeps your Claude Code 5-hour usage window aligned to when you actually work."
+      "description": "Schedules four daily resets of your Claude Code usage window, timed around the hours you actually work, so one heavy stretch doesn't drain a single window and leave you waiting."
     }
   ]
 }

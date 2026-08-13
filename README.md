@@ -92,7 +92,9 @@ Four fits a day. They're created once and then only ever **retimed** — never a
 
 ### What the resets actually say
 
-A reset works because *a message was sent* — the content is irrelevant to the mechanism. So each routine sends one short, self-contained line from a [fixed pool](lib/window_optimizer/ping_content.py): a stretch reminder, a posture check, "reply with just 'ok'". Four different ones, so your Routines list isn't four identical robots. They fetch nothing and get no tools at all.
+A reset works because *a message was sent* — the content is irrelevant to the mechanism. So each routine sends one short, self-contained line from a [fixed pool](lib/window_optimizer/ping_content.py): a stretch reminder, a posture check, "reply with just 'ok'". Four different ones, so your Routines list isn't four identical robots.
+
+They fetch nothing and use nothing. Their tool grant is a single harmless one (`TodoWrite`, a scratch list) rather than none, because the API reads an *empty* grant as "unset" and hands back full default access — shell, file writes, the lot. One placeholder tool is the narrowest thing it will actually honour ([ADR-0011](adr/0011-empty-allowed-tools-means-everything.md)).
 
 ### The weekly tune-up
 
