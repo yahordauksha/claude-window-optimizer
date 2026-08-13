@@ -1,8 +1,10 @@
 {
   "name": "claude-window-optimizer",
-  "description": "Keeps your Claude Code 5-hour usage window aligned to when you actually work: a setup command creates a Cloud Routine that pings just past each window's expiry, a bundled hook logs prompt activity, and a weekly tune-up re-anchors the schedule to your real usage pattern.",
+  "description": "Schedules four daily resets of your Claude Code usage window, timed around the hours you actually work, so one heavy stretch doesn't drain a single window and leave you waiting.",
   "author": {
     "name": "Yahor Dauksha"
   },
-  "version": "0.1.0"
+  "version": "1.0.0",
+  "homepage": "https://github.com/yahordauksha/claude-window-optimizer",
+  "license": "MIT"
 }

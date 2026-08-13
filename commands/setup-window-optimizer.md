@@ -85,7 +85,7 @@ Note whether any pre-existing routine looks like an old ad-hoc keep-alive (e.g. 
 ```
 Your window will reset daily at 07:50, 13:00, 18:10, 23:20 (local).
 4 routines in your Cloud Routines list. Each sends one short message:
-Water, Stretch, Mood, Check-in. Nothing fetched, no tools used.
+Water, Stretch, Mood, Check-in. Nothing fetched, no notifications.
 
 Create them?
 ```
