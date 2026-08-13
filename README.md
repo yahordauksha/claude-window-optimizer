@@ -165,6 +165,15 @@ claude --plugin-dir "$(pwd)"
 
 Loads for that one CLI session only — nothing persists, nothing to uninstall. (CLI only; `--plugin-dir` is a command-line flag.)
 
+### Updating
+
+```bash
+claude plugin marketplace update claude-window-optimizer
+claude plugin update claude-window-optimizer@claude-window-optimizer
+```
+
+Both steps are needed — the first refreshes the catalogue, the second pulls the new version. Without the refresh you'll reinstall whatever is already cached.
+
 ### Uninstalling
 
 ```bash
