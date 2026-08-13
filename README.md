@@ -190,6 +190,7 @@ Plus two hooks that need no setup: one logs prompt timestamps, one reminds you t
 | **Writes** | `~/.claude/window-optimizer/` — a timestamp log and small state files |
 | **Creates** | 4 Cloud Routines on your account |
 | **Sends** | One short message per reset, on the cheapest model — from a fixed pool, fetching nothing |
+| **Notifies** | Nothing. Routines are created with email, push and Slack notifications off, so they don't buzz your phone four times a day |
 | **Never touches** | Your prompt content, your tokens, anything else |
 
 ---

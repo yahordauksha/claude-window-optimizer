@@ -106,6 +106,7 @@ Per slot:
     "cron_expression": "<slots[i].cron_expression>",
     "enabled": true,
     "mcp_connections": [],
+    "notifications": { "channel": { "email": false, "push": false, "slack": false } },
     "job_config": {
       "ccr": {
         "environment_id": "<from STEP 3>",
@@ -133,6 +134,7 @@ Per slot:
 Two things the server does to this body that you must not paper over:
 
 - `"mcp_connections": []` is **confirmed ignored** — account-default connectors get attached regardless. STEP 5b removes them.
+- **Always send `notifications` with all channels false.** Omit it and the account default applies, which pushes a phone notification every time a reset fires — four buzzes a day for a message the user never needs to read. Verified settable on both create and update.
 - **Never send `"allowed_tools": []`.** An empty list is read as *unset* and replaced with the account's full default tool set — `Bash`, `Write`, `Edit`, `SendUserFile`, `REPL` and the rest. This was found live: a routine created with `[]` came back granting all of them. A non-empty list is honoured exactly, which is why `allowed_tools()` returns `["TodoWrite"]` — the narrowest grant the API will actually respect. Use whatever STEP 2b returned, verbatim.
 
 Record each returned `trigger_id` against its slot.
@@ -146,6 +148,7 @@ For **each** created routine, call `{"action": "get", "trigger_id": "<id>"}` and
 1. **`mcp_connections` is non-empty** → expect this; it happens on every create. Call `{"action": "update", "trigger_id": "<id>", "body": {"clear_mcp_connections": true}}`, then `get` **again** to confirm it's now `[]`. (Verified working across 4 real routines.) If it's still non-empty after the clear, **stop everything**: report which routine, that it has connectors you couldn't remove, and that it must be deleted manually at https://claude.ai/code/routines. Do not create further routines.
 2. **`session_context.allowed_tools` is not exactly what STEP 2b returned** → **stop everything**, report the exact difference, and say the routine must be deleted manually. Never "fix" a tool grant by guessing.
 3. **`cron_expression` differs from what was sent** → same: stop and report.
+3b. **`notifications` has any channel set to `true`** → send `{"notifications": {"channel": {"email": false, "push": false, "slack": false}}}` via `update`, then `get` again to confirm. Verified working. This one is a nuisance rather than a risk, so fix it and carry on rather than aborting the run.
 4. **`enabled` is not `true`** → don't silently re-enable it; the user may have turned it off deliberately. Note it in STEP 7's report as one extra line.
 
 Only once every routine passes may you proceed. Print nothing about this step unless something failed or check 4 tripped — a passing verification is not news.
