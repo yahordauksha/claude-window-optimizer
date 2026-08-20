@@ -81,7 +81,7 @@ On SURVIVES, ask directly whether to continue into `/spec` now. If yes, invoke i
 
 Once `/spec` completes, before checking in again, state the concrete approach in 3-5 sentences. Then check in again before dispatching implementation:
 - **Plugin product code** → `/implement` (its core-implementer/test-writer/edge-case-auditor cycle).
-- **This repo's own dev-pipeline tooling** — a change to `.claude/agents/*` or `.claude/commands/*` — is out of scope for this project's own pipeline (no `prompt-implementer`/`prompt-auditor` installed here; that discipline lives in the upstream `agent-ecosystem` vault). If a real gap in one of the installed templates surfaces while building this plugin, say so plainly and point the Operator at the vault instead of hand-editing the installed copy ad hoc.
+- **This repo's own dev-pipeline tooling** — a change to `.claude/agents/*` or `.claude/commands/*` — is out of scope for this project's own pipeline (no `prompt-implementer`/`prompt-auditor` installed here; that discipline lives in the upstream `olymp` vault). If a real gap in one of the installed templates surfaces while building this plugin, say so plainly and point the Operator at the vault instead of hand-editing the installed copy ad hoc.
 
 Never continue into implementation without this explicit check-in.
 
